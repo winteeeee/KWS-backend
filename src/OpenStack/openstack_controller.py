@@ -1,23 +1,20 @@
 import openstack
 
+from Model.models import ServerInfo
+
 
 class OpenStackController:
     def __init__(self, cloud: str):
         self._connection = openstack.connect(cloud=cloud)
 
-    def create_server(self,
-                      server_name: str,
-                      image_name: str,
-                      flavor_name: str,
-                      network_name: str,
-                      keypair_name: str):
-        image = self._connection.compute.find_image(image_name)
-        flavor = self._connection.compute.find_flavor(flavor_name)
-        network = self._connection.compute.find_network(network_name)
-        keypair = self._connection.compute.find_keypair(keypair_name)
+    def create_server(self, server_info: ServerInfo):
+        image = self._connection.compute.find_image(server_info.image_name)
+        flavor = self._connection.compute.find_flavor(server_info.flavor_name)
+        network = self._connection.compute.find_network(server_info.network_name)
+        keypair = self._connection.compute.find_keypair(server_info.keypair_name)
 
         server = self._connection.create_server(
-            name=server_name,
+            name=server_info.server_name,
             image_id=image.id,
             flavor_id=flavor.id,
             networks=[{"uuid": network.id}],

@@ -87,19 +87,42 @@ class OpenStackController:
         :param network_name: 이미지 이름
         :return: Network 객체
         """
-        return self._connection.compute.find_network(network_name)
+        return self._connection.network.find_network(network_name)
 
-    def create_network(self, network_name: str) -> openstack.network.v2.network.Network:
-        # TODO UC-0211 네트워크 생성
-        pass
+    def create_network(self,
+                       network_name: str,
+                       external: bool = False) -> openstack.network.v2.network.Network:
+        """
+        UC-0211 네트워크 생성
 
-    def update_network(self, network_name: str) -> None:
-        # TODO UC-0212 네트워크 수정
-        pass
+        :param network_name: 생성할 네트워크 이름
+        :param external: 외부 네트워크 여부
+        :return: openstack.network.v2.network.Network
+        """
+        return self._connection.network.create_network(name=network_name, is_router_external=external)
+
+    def update_network(self,
+                       network_name: str,
+                       external: bool) -> openstack.network.v2.network.Network:
+        """
+        UC-0212 네트워크 수정
+
+        :param network_name: 수정할 네트워크 이름
+        :param external: 외부 네트워크 여부
+        :return: openstack.network.v2.network.Network
+        """
+
+        return self._connection.network.update_network(self.find_network(network_name), is_router_external=external)
 
     def delete_network(self, network_name: str) -> None:
-        # TODO UC-0213 네트워크 삭제
-        pass
+        """
+        UC-0213 네트워크 삭제
+
+        :param network_name: 삭제할 네트워크 이름
+        :return: 없음
+        """
+
+        self._connection.network.delete_network(self.find_network(network_name))
     
     def find_subnet(self, subnet_name: str) -> object:
         # TODO UC-0214 서브넷 조회

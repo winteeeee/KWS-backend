@@ -12,8 +12,7 @@ class OpenStackController:
         pass
 
     def find_server(self, server_name: str) -> object:
-        # TODO 서버 조회
-        pass
+        return self._connection.compute.find_server(server_name)
 
     def create_server(self, server_info: ServerInfo) -> openstack.compute.v2.server.Server:
         """
@@ -26,6 +25,26 @@ class OpenStackController:
         image = self.find_image(server_info.image_name)
         flavor = self.find_flavor(server_info.flavor_name)
         network = self.find_network(server_info.network_name)
+        keypair = self.find_key_pair(f"{ServerInfo.server_name}_keypair")
+
+        server = self._connection.create_server(
+            name=server_info.server_name,
+            image_id=image.id,
+            flavor_id=flavor.id,
+            networks=[{"uuid": network.id}],
+            key_name=keypair.name,
+        )
+
+        server = self._connection.compute.wait_for_server(server)
+        self._connection.add_auto_ip(server)
+
+        return server
+
+    """
+    def create_server(self, server_info: ServerInfo) -> openstack.compute.v2.server.Server:
+        image = self.find_image(server_info.image_name)
+        flavor = self.find_flavor(server_info.flavor_name)
+        network = self.find_network(server_info.network_name)
 
         server = self._connection.create_server(
             name=server_info.server_name,
@@ -34,6 +53,7 @@ class OpenStackController:
             networks=[{"uuid": network.id}],
         )
         server = self._connection.compute.wait_for_server(server)
+        self._connection.add_auto_ip(server)
 
         if server_info.password:
             self.allocate_password(server, server_info.password)
@@ -42,15 +62,23 @@ class OpenStackController:
             self.allocate_key_pair(server, keypair_name)
 
         return server
+    """
 
     def delete_server(self, server_name: str) -> None:
         # TODO UC-0102 서버 반납 / UC-0203 인스턴스 삭제
-        pass
+        server = self._connection.compute.find_server(server_name)
+        floating_ips = self._connection.network.ips(server_id=server.id, device_id=server.id)
 
+        for floating_ip in floating_ips:
+            self._connection.network.delete_ip(floating_ip.id)
+
+        self._connection.compute.delete_server(server)
+    """
     def create_floating_ip(self) -> str:
         # TODO UC-0204 유동 IP 할당
         # TODO 외부 네트워크에서 유동 IP 생성. 생성한 유동 IP 반환
-        pass
+        # 서버 유동 IP 자동 할당
+
 
     def allocate_floating_ip(self, server: object, floating_ip: str) -> None:
         # TODO UC-0205 유동 IP 연결
@@ -58,7 +86,7 @@ class OpenStackController:
         pass
         # floating_ip = self._connection.add_auto_ip(server)
         # return floating_ip
-
+    """
     def find_image(self, image_name: str) -> openstack.compute.v2.image.Image:
         """
         UC-0206 이미지 조회
@@ -177,24 +205,32 @@ class OpenStackController:
         # TODO 서버의 password 할당
         pass
 
-    def create_key_pair(self) -> str:
+    def create_key_pair(self, keypair_name) -> str:
         # TODO 키 페어 생성. 키페어 name 반환
-        pass
+        # 변경 사항
+        # 키페이 이름 : server_name + keypair
+        # 반환 : 일단 개인키 파일에 저장
 
+        keypair = self._connection.compute.create_keypair(name=keypair_name)
+
+        with open(f"{keypair_name}.pem", "w") as f:
+            f.write(keypair.private_key)
+
+        return keypair
+
+    """
     def allocate_key_pair(self, server: object, key_pair_name: str) -> None:
         # TODO 키페어를 서버에 할당. 반환값 없음
         pass
-
-    def find_key_pair(self, **kwargs) -> tuple:
+    """
+    def find_key_pair(self, keypair_name):
         # TODO 키페어 반환 (개인키, 공개키)
+        keypair = self._connection.compute.find_keypair(keypair_name)
 
-        if kwargs["server"]:
-            # TODO 서버에 할당된 키페어 반환. value로 server 객체가 들어온다고 가정
-            pass
+        if not keypair:
+            keypair = self.create_key_pair(keypair_name)
 
-        if kwargs["key_pair_name"]:
-            # TODO 키페어 이름으로 검색하여 반환
-            pass
+        return keypair
 
     def take_snapshot(self, server: object):
         # TODO 서버의 스냅샷 생성

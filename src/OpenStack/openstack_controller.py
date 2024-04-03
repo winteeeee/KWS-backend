@@ -11,6 +11,17 @@ class OpenStackController:
         # TODO UC-0104 서버 대여 현황 조회
         pass
 
+    def get_connection(self) -> openstack.connection.Connection:
+        """
+        어댑터 클래스 내부 Connection 객체를 반환합니다.
+        Openstack SDK에 직접 접근할 필요가 있을 때 사용합니다.
+        Openstack SDK의 자세한 내용은 아래 문서를 참고하세요.
+        https://docs.openstack.org/openstacksdk/rocky/user/index.html#api-documentation
+
+        :return: openstack.connection.Connection
+        """
+        return self._connection
+
     def find_server(self, server_name: str) -> object:
         return self._connection.compute.find_server(server_name)
 
@@ -198,9 +209,8 @@ class OpenStackController:
                       subnet_gateway: str = None) -> openstack.network.v2.subnet.Subnet:
         """
         UC-0216 서브넷 수정
-
-        subnet_address는 read-only 속성이라서 수정 불가능.
-        subnet_address를 수정하고 싶다면 서브넷을 삭제 후 재생성 해야합니다.
+        subnet_address는 read-only 속성이라서 수정 불가능합니다.
+        subnet_address를 수정하고 싶다면 서브넷을 삭제 후 재생성 하세요.
 
         :param subnet_name: 변경할 서브넷의 이름
         :param new_name: 변경할 서브넷의 새 이름
@@ -227,21 +237,84 @@ class OpenStackController:
 
         self._connection.network.delete_subnet(self.find_subnet(subnet_name))
 
-    def find_router(self, router_name: str) -> object:
-        # TODO UC-0218 라우터 조회
-        pass
+    def find_router(self, router_name: str) -> openstack.network.v2.router.Router:
+        """
+        UC-0218 라우터 조회
 
-    def create_router(self, router_name: str) -> object:
-        # TODO UC-0219 라우터 생성
-        pass
+        :param router_name: 조회할 라우터 이름
+        :return: openstack.network.v2.router.Router
+        """
 
-    def update_router(self, router_name: str) -> None:
-        # TODO UC-0220 라우터 수정
-        pass
+        return self._connection.network.find_router(router_name)
+
+    def create_router(self,
+                      router_name: str,
+                      external_network_name: str = None,
+                      external_subnet_name: str = None) -> openstack.network.v2.router.Router:
+        """
+        UC-0219 라우터 생성
+        external_network_name과 external_subnet_name을 입력하면
+        라우터 생성과 동시에 외부 네트워크의 게이트웨이와 연결합니다.
+        기본적으로 서브넷 내부 게이트웨이 IP가 할당됩니다.
+
+        내부 네트워크와의 연결은 add_interface_to_router 함수를 이용합니다.
+
+        :param router_name: 생성할 라우터 이름
+        :param external_network_name: 라우터와 연결할 외부 네트워크 이름
+        :param external_subnet_name: 라우터의 게이트웨이로 선택할 외부 네트워크의 서브넷
+        :return: openstack.network.v2.router.Router
+        """
+
+        if external_subnet_name and external_subnet_name is not None:
+            external_network = self.find_network(external_network_name)
+            external_gateway = {
+                "network_id": external_network.id,
+                "external_fixed_ips": [{
+                    "subnet_id": self.find_subnet(external_subnet_name).id
+                }]
+            }
+
+            router = self._connection.network.create_router(name=router_name,
+                                                            external_gateway_info=external_gateway)
+        else:
+            router = self._connection.network.create_router(name=router_name)
+
+        return router
+
+    def add_interface_to_router(self, router_name: str, internal_subnet_name: str) \
+            -> openstack.network.v2.router.Router:
+        """
+        라우터와 내부 네트워크를 연결합니다.
+
+        :param router_name: 연결할 라우터 이름
+        :param internal_subnet_name: 라우터와 연결할 내부 네트워크의 서브넷 이름
+        :return:
+        """
+
+        return self._connection.network.add_interface_to_router(router=self.find_router(router_name),
+                                                                subnet_id=self.find_subnet(internal_subnet_name).id)
+
+    def update_router(self, router_name: str, new_name: str) -> openstack.network.v2.router.Router:
+        """
+        UC-0220 라우터 수정
+
+        :param router_name: 변경할 라우터 이름
+        :param new_name: 변경할 라우터의 새 이름
+        :return: openstack.network.v2.router.Router
+        """
+
+        return self._connection.network.update_router(router=self.find_router(router_name),
+                                                      name=new_name)
 
     def delete_router(self, router_name: str) -> None:
-        # TODO UC-0221 라우터 삭제
-        pass
+        """
+        UC-0221 라우터 삭제
+
+        :param router_name: 삭제할 라우터 이름
+        :return: 없음
+        """
+
+        self._connection.network.delete_router(self.find_router(router_name))
     
     def find_flavor(self, flavor_name: str) -> openstack.compute.v2.flavor.Flavor:
         """

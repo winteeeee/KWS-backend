@@ -112,8 +112,8 @@ class OpenStackController:
         """
         UC-0210 네트워크 조회
 
-        :param network_name: 이미지 이름
-        :return: Network 객체
+        :param network_name: 조회할 네트워크 이름
+        :return: openstack.network.v2.network.Network
         """
         return self._connection.network.find_network(network_name)
 
@@ -131,16 +131,22 @@ class OpenStackController:
 
     def update_network(self,
                        network_name: str,
-                       external: bool) -> openstack.network.v2.network.Network:
+                       new_name: str = None,
+                       external: bool = None) -> openstack.network.v2.network.Network:
         """
         UC-0212 네트워크 수정
 
         :param network_name: 수정할 네트워크 이름
+        :param new_name: 수정할 네트워크의 새 이름
         :param external: 외부 네트워크 여부
         :return: openstack.network.v2.network.Network
         """
 
-        return self._connection.network.update_network(self.find_network(network_name), is_router_external=external)
+        target_network = self.find_network(network_name)
+        return self._connection.network.update_network(network=target_network,
+                                                       name=new_name if new_name is not None else network_name,
+                                                       is_router_external=external if external is not None
+                                                       else target_network.is_router_external)
 
     def delete_network(self, network_name: str) -> None:
         """

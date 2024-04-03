@@ -158,21 +158,74 @@ class OpenStackController:
 
         self._connection.network.delete_network(self.find_network(network_name))
     
-    def find_subnet(self, subnet_name: str) -> object:
-        # TODO UC-0214 서브넷 조회
-        pass
-    
-    def create_subnet(self, subnet_name: str) -> object:
-        # TODO UC-0215 서브넷 생성
-        pass
+    def find_subnet(self, subnet_name: str) -> openstack.network.v2.subnet.Subnet:
+        """
+        UC-0214 서브넷 조회
 
-    def update_subnet(self, subnet_name: str) -> None:
-        # TODO UC-0216 서브넷 수정
-        pass
+        :param subnet_name: 조회할 서브넷 이름
+        :return: openstack.network.v2.subnet.Subnet
+        """
+
+        return self._connection.network.find_subnet(subnet_name)
+    
+    def create_subnet(self,
+                      subnet_name: str,
+                      ip_version: int,
+                      subnet_address: str,
+                      subnet_gateway: str,
+                      network_name: str) -> openstack.network.v2.subnet.Subnet:
+        """
+        UC-0215 서브넷 생성
+
+        :param subnet_name: 생성할 서브넷 이름
+        :param ip_version: IP 주소 버전
+        :param subnet_address: 서브넷 주소
+        :param subnet_gateway: 서브넷 게이트웨이 주소
+        :param network_name: 연결할 네트워크 이름
+        :return: openstack.network.v2.subnet.Subnet
+        """
+
+        return self._connection.network.create_subnet(name=subnet_name,
+                                                      ip_version=ip_version,
+                                                      cidr=subnet_address,
+                                                      gateway_ip=subnet_gateway,
+                                                      network_id=self.find_network(network_name).id)
+
+    def update_subnet(self,
+                      subnet_name: str,
+                      new_name: str = None,
+                      ip_version: int = None,
+                      subnet_gateway: str = None) -> openstack.network.v2.subnet.Subnet:
+        """
+        UC-0216 서브넷 수정
+
+        subnet_address는 read-only 속성이라서 수정 불가능.
+        subnet_address를 수정하고 싶다면 서브넷을 삭제 후 재생성 해야합니다.
+
+        :param subnet_name: 변경할 서브넷의 이름
+        :param new_name: 변경할 서브넷의 새 이름
+        :param ip_version: 변경할 아이피 버전
+        :param subnet_gateway: 변경할 서브넷 게이트웨이
+        :return: openstack.network.v2.subnet.Subnet
+        """
+
+        target_subnet = self.find_subnet(subnet_name)
+        return self._connection.network.update_subnet(subnet=target_subnet,
+                                                      name=new_name if new_name is not None else subnet_name,
+                                                      ip_version=ip_version if ip_version is not None
+                                                      else target_subnet.ip_version,
+                                                      gateway_ip=subnet_gateway if subnet_gateway is not None
+                                                      else target_subnet.gateway_ip)
 
     def delete_subnet(self, subnet_name: str) -> None:
-        # TODO UC-0217 서브넷 삭제
-        pass
+        """
+        UC-0217 서브넷 삭제
+
+        :param subnet_name: 삭제할 서브넷의 이름
+        :return: 없음
+        """
+
+        self._connection.network.delete_subnet(self.find_subnet(subnet_name))
 
     def find_router(self, router_name: str) -> object:
         # TODO UC-0218 라우터 조회

@@ -320,18 +320,37 @@ class OpenStackController:
         """
         UC-0222 플레이버 조회
 
-        :param flavor_name: 플레이버 이름
-        :return: Flavor 객체
+        :param flavor_name: 조회할 플레이버 이름
+        :return: openstack.compute.v2.flavor.Flavor
         """
         return self._connection.compute.find_flavor(flavor_name)
 
-    def create_flavor(self, flavor_name: str) -> openstack.compute.v2.flavor.Flavor:
-        # TODO UC-0223 플레이버 생성
-        pass
+    def create_flavor(self,
+                      flavor_name: str,
+                      cpu: int,
+                      ram: int,
+                      disk: int) -> openstack.compute.v2.flavor.Flavor:
+        """
+        UC-0223 플레이버 생성
+
+        :param flavor_name: 생성할 플레이버 이름
+        :param cpu: 플레이버의 vcpu 수
+        :param ram: 플레이버의 RAM 용량(MB)
+        :param disk: 플레이버의 디스크 용량(GB)
+        :return: openstack.compute.v2.flavor.Flavor
+        """
+
+        return self._connection.compute.create_flavor(name=flavor_name, vcpus=cpu, ram=ram, disk=disk)
 
     def delete_flavor(self, flavor_name: str) -> None:
-        # TODO UC-0224 플레이버 삭제
-        pass
+        """
+        UC-0224 플레이버 삭제
+
+        :param flavor_name: 삭제할 플레이버 이름
+        :return: 없음
+        """
+
+        self._connection.compute.delete_flavor(self.find_flavor(flavor_name))
 
     def allocate_password(self, server: object, password: str) -> None:
         # TODO 서버의 password 할당

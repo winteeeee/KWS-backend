@@ -76,7 +76,14 @@ class OpenStackController:
     """
 
     def delete_server(self, server_name: str) -> None:
-        # TODO UC-0102 서버 반납 / UC-0203 인스턴스 삭제
+        """
+        UC-0102 서버 반납 / UC-0203 인스턴스 삭제
+        서버에 할당된 유동 IP도 자동으로 삭제합니다.
+
+        :param server_name: 삭제할 서버 이름
+        :return: 없음
+        """
+
         server = self._connection.compute.find_server(server_name)
         floating_ips = self._connection.network.ips(server_id=server.id, device_id=server.id)
 
@@ -107,17 +114,15 @@ class OpenStackController:
         """
         return self._connection.compute.find_image(image_name)
 
-    def create_image(self, image_name: str) -> openstack.compute.v2.image.Image:
-        # TODO UC-0206 이미지 생성
-        pass
-
-    def update_image(self, image_name: str) -> None:
-        # TODO UC-0207 이미지 수정
-        pass
-
     def delete_image(self, image_name: str) -> None:
-        # TODO UC-0208 이미지 삭제
-        pass
+        """
+        UC-0208 이미지 삭제
+
+        :param image_name: 삭제할 이미지 이름
+        :return: 없음
+        """
+
+        self._connection.compute.delete_image(self.find_image(image_name))
     
     def find_network(self, network_name: str) -> openstack.network.v2.network.Network:
         """

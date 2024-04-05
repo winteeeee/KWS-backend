@@ -27,53 +27,45 @@ class OpenStackController:
 
     def create_server(self, server_info: ServerInfo) -> openstack.compute.v2.server.Server:
         """
-        UC-0101 서버 대여
-        UC-0202 인스턴스 생성
+        UC-0101 서버 대여 / UC-0202 인스턴스 생성
+        서버 정보를 바탕으로 인스턴스를 생성합니다.
+        password가 입력된 경우 password로 접속이 가능하도록 설정하며,
+        그게 아닌 경우 키페어를 할당합니다.
 
         :param server_info: 생성할 서버 정보
         :return: 서버 객체
         """
-        image = self.find_image(server_info.image_name)
-        flavor = self.find_flavor(server_info.flavor_name)
-        network = self.find_network(server_info.network_name)
-        keypair = self.find_key_pair(f"{ServerInfo.server_name}_keypair")
 
-        server = self._connection.create_server(
-            name=server_info.server_name,
-            image_id=image.id,
-            flavor_id=flavor.id,
-            networks=[{"uuid": network.id}],
-            key_name=keypair.name,
-        )
+        kwargs = {
+            "name": server_info.server_name,
+            "image": self.find_image(server_info.image_name).id,
+            "flavor": self.find_flavor(server_info.flavor_name).id,
+            "network": self.find_network(server_info.network_name).id,
+        }
 
-        server = self._connection.compute.wait_for_server(server)
-        self._connection.add_auto_ip(server)
-
-        return server
-
-    """
-    def create_server(self, server_info: ServerInfo) -> openstack.compute.v2.server.Server:
-        image = self.find_image(server_info.image_name)
-        flavor = self.find_flavor(server_info.flavor_name)
-        network = self.find_network(server_info.network_name)
-
-        server = self._connection.create_server(
-            name=server_info.server_name,
-            image_id=image.id,
-            flavor_id=flavor.id,
-            networks=[{"uuid": network.id}],
-        )
-        server = self._connection.compute.wait_for_server(server)
-        self._connection.add_auto_ip(server)
-
-        if server_info.password:
-            self.allocate_password(server, server_info.password)
+        if server_info.password is None:
+            kwargs["key_name"] = self.find_key_pair(f"{server_info.server_name}_keypair").name
         else:
-            keypair_name = self.create_key_pair()
-            self.allocate_key_pair(server, keypair_name)
+            if server_info.cloud_init is not None:
+                cloud_init = server_info.cloud_init
+            else:
+                cloud_init = "#cloud-config"
+
+            cloud_init += f"""
+chpasswd:
+ list: |
+   ubuntu:{server_info.password}
+ expire: False
+ssh_pwauth: True"""
+
+            kwargs["userdata"] = cloud_init
+            print(cloud_init)
+
+        server = self._connection.create_server(**kwargs)
+        server = self._connection.compute.wait_for_server(server)
+        self._connection.add_auto_ip(server)
 
         return server
-    """
 
     def delete_server(self, server_name: str) -> None:
         """
@@ -91,20 +83,7 @@ class OpenStackController:
             self._connection.network.delete_ip(floating_ip.id)
 
         self._connection.compute.delete_server(server)
-    """
-    def create_floating_ip(self) -> str:
-        # TODO UC-0204 유동 IP 할당
-        # TODO 외부 네트워크에서 유동 IP 생성. 생성한 유동 IP 반환
-        # 서버 유동 IP 자동 할당
 
-
-    def allocate_floating_ip(self, server: object, floating_ip: str) -> None:
-        # TODO UC-0205 유동 IP 연결
-        # TODO 인자로 넘겨받은 유동 IP를 서버에 할당. 반환값 없음
-        pass
-        # floating_ip = self._connection.add_auto_ip(server)
-        # return floating_ip
-    """
     def find_image(self, image_name: str) -> openstack.compute.v2.image.Image:
         """
         UC-0206 이미지 조회
@@ -357,15 +336,13 @@ class OpenStackController:
 
         self._connection.compute.delete_flavor(self.find_flavor(flavor_name))
 
-    def allocate_password(self, server: object, password: str) -> None:
-        # TODO 서버의 password 할당
-        pass
+    def create_key_pair(self, keypair_name) -> openstack.compute.v2.keypair.Keypair:
+        """
+        키 페어를 생성하고 개인키 파일을 생성합니다.
 
-    def create_key_pair(self, keypair_name) -> str:
-        # TODO 키 페어 생성. 키페어 name 반환
-        # 변경 사항
-        # 키페이 이름 : server_name + keypair
-        # 반환 : 일단 개인키 파일에 저장
+        :param keypair_name:
+        :return: openstack.compute.v2.keypair.Keypair
+        """
 
         keypair = self._connection.compute.create_keypair(name=keypair_name)
 
@@ -374,13 +351,15 @@ class OpenStackController:
 
         return keypair
 
-    """
-    def allocate_key_pair(self, server: object, key_pair_name: str) -> None:
-        # TODO 키페어를 서버에 할당. 반환값 없음
-        pass
-    """
-    def find_key_pair(self, keypair_name):
-        # TODO 키페어 반환 (개인키, 공개키)
+    def find_key_pair(self, keypair_name) -> openstack.compute.v2.keypair.Keypair:
+        """
+        해당 키 페어 이름을 가진 키 페어를 찾아 키 페어 객체를 반환합니다.
+        없다면 해당 이름을 지닌 키 페어를 새로 생성합니다.
+
+        :param keypair_name: 조회할 키 페어 이름
+        :return: openstack.compute.v2.keypair.Keypair
+        """
+
         keypair = self._connection.compute.find_keypair(keypair_name)
 
         if not keypair:

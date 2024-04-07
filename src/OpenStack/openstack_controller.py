@@ -5,6 +5,7 @@ from Model.models import ServerInfo
 
 class OpenStackController:
     def __init__(self, cloud: str):
+        # TODO 로그 추가
         self._connection = openstack.connect(cloud=cloud)
 
     def monitoring_resources(self) -> list[dict]:
@@ -92,7 +93,6 @@ chpasswd:
 ssh_pwauth: True"""
 
             kwargs["userdata"] = cloud_init
-            print(cloud_init)
 
         server = self._connection.create_server(**kwargs)
         server = self._connection.compute.wait_for_server(server)
@@ -399,7 +399,3 @@ ssh_pwauth: True"""
             keypair = self.create_key_pair(keypair_name)
 
         return keypair
-
-    def take_snapshot(self, server: object):
-        # TODO 서버의 스냅샷 생성
-        pass

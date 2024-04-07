@@ -7,7 +7,7 @@ class OpenStackController:
     def __init__(self, cloud: str):
         self._connection = openstack.connect(cloud=cloud)
 
-    def monitoring_resources(self) -> dict:
+    def monitoring_resources(self) -> list[dict]:
         """
         UC-0104 서버 대여 현황 조회
         현재 시스템에 생성된 인스턴스 정보들을 한 번에 반환합니다.
@@ -48,7 +48,14 @@ class OpenStackController:
         """
         return self._connection
 
-    def find_server(self, server_name: str) -> object:
+    def find_server(self, server_name: str) -> openstack.compute.v2.server.Server:
+        """
+        서버 조회
+
+        :param server_name: 조회할 서버명
+        :return: openstack.compute.v2.server.Server
+        """
+
         return self._connection.compute.find_server(server_name)
 
     def create_server(self, server_info: ServerInfo) -> openstack.compute.v2.server.Server:

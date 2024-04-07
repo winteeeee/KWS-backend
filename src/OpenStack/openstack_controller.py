@@ -8,8 +8,34 @@ class OpenStackController:
         self._connection = openstack.connect(cloud=cloud)
 
     def monitoring_resources(self) -> dict:
-        # TODO UC-0104 서버 대여 현황 조회
-        pass
+        """
+        UC-0104 서버 대여 현황 조회
+        현재 시스템에 생성된 인스턴스 정보들을 한 번에 반환합니다.
+        서버 정보가 담긴 딕셔너리를 원소로하는 리스트가 반환됩니다.
+
+        딕셔너리의 정보는 아래와 같습니다.
+        Name: 서버의 이름
+        Floating-IP: 서버의 유동 IP
+        Date: 추가 예정
+
+        :return: 서버 딕셔너리 리스트
+        """
+
+        result = []
+
+        servers = self._connection.compute.servers()
+        for server in servers:
+            server_info = {"Name": server.name}
+            for addresses in server.addresses.values():
+                for address in addresses:
+                    if address["OS-EXT-IPS:type"] == "floating":
+                        server_info["Floating-IP"] = address["addr"]
+                        break
+            # TODO Date 정보 추가
+
+            result.append(server_info)
+
+        return result
 
     def get_connection(self) -> openstack.connection.Connection:
         """

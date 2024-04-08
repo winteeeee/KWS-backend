@@ -1,4 +1,5 @@
 import openstack
+#import paramiko
 
 from Model.models import ServerInfo
 
@@ -8,7 +9,7 @@ class OpenStackController:
         # TODO 로그 추가
         self._connection = openstack.connect(cloud=cloud)
 
-    def monitoring_resources(self) -> list[dict]:
+    def monitoring_servers(self) -> list[dict]:
         """
         UC-0104 서버 대여 현황 조회
         현재 시스템에 생성된 인스턴스 정보들을 한 번에 반환합니다.
@@ -22,6 +23,7 @@ class OpenStackController:
         :return: 서버 딕셔너리 리스트
         """
 
+        """
         result = []
 
         servers = self._connection.compute.servers()
@@ -35,6 +37,57 @@ class OpenStackController:
             # TODO Date 정보 추가
 
             result.append(server_info)
+
+        return result
+        """
+        result = []
+
+        servers = self._connection.compute.servers()
+        for server in servers:
+            server_info = {"name": server.name}
+            private_addresses = server["addresses"]["private"]
+
+            floating_ip = ""
+            if len(private_addresses) > 2:
+                floating_ip = private_addresses[2]['addr']
+            server_info["Floating-IP"] = floating_ip
+
+            server_info["start-date"] = ""
+            server_info["end-date"] = ""
+
+            result.append(server_info)
+
+        return result
+
+    def monitoring_resources(self) -> dict:
+        """
+        UC- 서버 자원 현황 조회
+        현재 시스템에 할당된 자원 정보들을 한 번에 반환합니다.
+        자원 정보가 담긴 딕셔너리가 반환됩니다.
+
+        딕셔너리의 정보는 아래와 같습니다.
+        count: 현재 생성된 서버의 수
+        vcpus: 현재 사용되는 cpu 코어 개수
+        ram: 현재 사용되는 RAM 용량(GB)
+
+        :return: 자원 딕셔너리
+        """
+        count = 0
+        vcpus = 0
+        ram = 0
+
+        servers = self._connection.compute.servers()
+
+        for server in servers:
+            count += 1
+            vcpus += server.flavor["vcpus"]
+            ram += server.flavor["ram"]
+
+        result = {
+            "count": count,
+            "vcpus": vcpus,
+            "ram": int(ram / 1024)
+        }
 
         return result
 
@@ -399,3 +452,24 @@ ssh_pwauth: True"""
             keypair = self.create_key_pair(keypair_name)
 
         return keypair
+
+
+    """
+    def validate_ssh_key(self, private_key) -> bool:
+        key = paramiko.RSAKey.from_private_key_file('cloud.key')
+
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        try:
+        # client.connect(hostname='192.168.0.4', username='ubuntu', pkey=key)
+        # client.connect(hostname='192.168.0.4', username='ubuntu', password='1234')
+        except Exception as ex:
+            return false
+        finally:
+            client.close()
+            os.remove(private_key)
+            
+        return True
+    """
+

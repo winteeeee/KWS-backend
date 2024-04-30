@@ -6,6 +6,7 @@ from database.factories import MySQLEngineFactory
 from model.db_models import Server
 from model.http_models import ServerInfo
 from openStack.openstack_controller import OpenStackController
+from datetime import datetime
 
 router = APIRouter(prefix="/openstack")
 controller = OpenStackController(cloud=openstack_config["cloud"])
@@ -41,17 +42,43 @@ def get_key_pair(server_info: ServerInfo):
     return {"private_key": private_key, "public_key": public_key}
 
 
+@router.get("/instance")
+def server_show():
+    servers = serverDAO.find_all()
+    return servers
+
+
+@router.get("/resources")
+def servers_resource():
+    return controller.monitoring_resources()
+
+
 @router.delete("/return")
-def server_return(server_name: str):
-    serverDAO.delete(serverDAO.find_by_server_name(server_name))
-    return controller.delete_server(server_name)
+def server_return(server_name: str,
+                  host_name: str,
+                  user_name: str,
+                  private_key: bytes = None,
+                  password: str = None):
+    if controller.validate_ssh_key(host_name=host_name,
+                                   user_name=user_name,
+                                   private_key=private_key,
+                                   password=password):
+        server = serverDAO.find_by_server_name(server_name)
+        serverDAO.delete(server)
+        controller.delete_server(server_name)
 
 
 @router.put("/renew")
-def server_renew():
-    pass
-
-
-@router.get("/instance")
-def server_show():
-    return controller.monitoring_resources()
+def server_renew(server_name: str,
+                 new_end_date: datetime,
+                 host_name: str,
+                 user_name: str,
+                 private_key: bytes = None,
+                 password: str = None):
+    if controller.validate_ssh_key(host_name=host_name,
+                                   user_name=user_name,
+                                   private_key=private_key,
+                                   password=password):
+        server = serverDAO.find_by_server_name(server_name)
+        server.end_date = new_end_date
+        serverDAO.save(server)

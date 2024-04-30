@@ -1,5 +1,6 @@
+import os
+import paramiko
 import openstack
-#import paramiko
 
 from model.http_models import ServerInfo
 
@@ -10,6 +11,7 @@ class OpenStackController:
         self._connection = openstack.connect(cloud=cloud)
 
     def monitoring_servers(self) -> list[dict]:
+        # TODO 이 함수는 DB로 find_all 하면 나오는 정보라 삭제 예정
         """
         UC-0104 서버 대여 현황 조회
         현재 시스템에 생성된 인스턴스 정보들을 한 번에 반환합니다.
@@ -23,9 +25,9 @@ class OpenStackController:
         :return: 서버 딕셔너리 리스트
         """
 
-        """
         result = []
 
+        """
         servers = self._connection.compute.servers()
         for server in servers:
             server_info = {"Name": server.name}
@@ -40,7 +42,6 @@ class OpenStackController:
 
         return result
         """
-        result = []
 
         servers = self._connection.compute.servers()
         for server in servers:
@@ -453,23 +454,27 @@ ssh_pwauth: True"""
 
         return keypair
 
-
-    """
-    def validate_ssh_key(self, private_key) -> bool:
-        key = paramiko.RSAKey.from_private_key_file('cloud.key')
-
+    def validate_ssh_key(self, **kwargs) -> bool:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
+        host_name = kwargs['host_name']
+        user_name = kwargs['user_name']
+
         try:
-        # client.connect(hostname='192.168.0.4', username='ubuntu', pkey=key)
-        # client.connect(hostname='192.168.0.4', username='ubuntu', password='1234')
-        except Exception as ex:
-            return false
+            if kwargs['private_key']:
+                with open("cloud.key", "wb") as private_key:
+                    private_key.write(kwargs['private_key'])
+
+                key = paramiko.RSAKey.from_private_key_file('cloud.key')
+                client.connect(hostname=host_name, username=user_name, pkey=key)
+            else:
+                client.connect(hostname=host_name, username=user_name, password=kwargs['password'])
+        except (paramiko.SSHException, FileNotFoundError):
+            return False
         finally:
             client.close()
-            os.remove(private_key)
-            
-        return True
-    """
+            if os.path.exists("cloud.key"):
+                os.remove("cloud.key")
 
+        return True

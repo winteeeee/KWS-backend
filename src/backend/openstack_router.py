@@ -1,11 +1,15 @@
 from fastapi import APIRouter
 
-from Model.models import ServerInfo
-from Config.config import openstack_config
-from OpenStack.openstack_controller import OpenStackController
+from config.config import openstack_config
+from database.ServerDAO import ServerDAO
+from database.factories import MySQLEngineFactory
+from model.db_models import Server
+from model.http_models import ServerInfo
+from openStack.openstack_controller import OpenStackController
 
 router = APIRouter(prefix="/openstack")
 controller = OpenStackController(cloud=openstack_config["cloud"])
+serverDAO = ServerDAO(MySQLEngineFactory())
 
 
 @router.post("/rent")
@@ -13,6 +17,17 @@ def server_rent(server_info: ServerInfo):
     server = controller.create_server(server_info)
     floating_ip = controller.create_floating_ip()
     controller.allocate_floating_ip(server, floating_ip)
+
+    flavor = controller.find_flavor(flavor_name=server_info.flavor_name)
+    serverDAO.save(Server(
+        user_name=server_info.user_name,
+        server_name=server_info.server_name,
+        start_date=server_info.start_date,
+        end_date=server_info.end_date,
+        vcpu=flavor.vcpus,
+        ram=flavor.ram,
+        floating_ip=floating_ip
+    ))
 
     return {"ip": floating_ip}
 
@@ -28,6 +43,7 @@ def get_key_pair(server_info: ServerInfo):
 
 @router.delete("/return")
 def server_return(server_name: str):
+    serverDAO.delete(serverDAO.find_by_server_name(server_name))
     return controller.delete_server(server_name)
 
 

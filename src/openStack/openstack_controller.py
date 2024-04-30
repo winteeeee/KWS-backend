@@ -1,7 +1,7 @@
 import openstack
 #import paramiko
 
-from Model.models import ServerInfo
+from model.http_models import ServerInfo
 
 
 class OpenStackController:

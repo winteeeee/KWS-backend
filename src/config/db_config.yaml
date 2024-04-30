@@ -1,0 +1,5 @@
+id: "root"
+passwd: "1234"
+ip: "localhost"
+port: 3306
+name: "kws"

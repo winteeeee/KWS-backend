@@ -28,7 +28,7 @@ schedule.every().day.at("00:00").do(delete_expired_data)
 def run_scheduler():
     while True:
         schedule.run_pending()
-        time.sleep(3600)
+        time.sleep(1)
 
 
 if __name__ == "__main__":

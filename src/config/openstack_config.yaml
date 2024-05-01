@@ -1,11 +1,5 @@
-cloud: "openstack"
-auth:
-  auth_url: http://192.168.0.4/identity
-  username: "admin"
-  password: "secret"
-  project_id: fc95418d70a1439d9a10112b9059c2cd
-  project_name: "admin"
-  user_domain_name: "Default"
-region_name: "RegionOne"
-interface: "public"
-identity_api_version: 3
+auth_url: "http://192.168.0.51/identity"
+username: "admin"
+password: "1234"
+project_name: "admin"
+domain_name: "default"

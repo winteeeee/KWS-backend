@@ -2,63 +2,18 @@ import os
 import paramiko
 import openstack
 
-from model.http_models import ServerInfo
+from model.http_models import ServerDTOForCreate
+from config.config import openstack_config
 
 
 class OpenStackController:
-    def __init__(self, cloud: str):
+    def __init__(self):
         # TODO 로그 추가
-        self._connection = openstack.connect(cloud=cloud)
-
-    def monitoring_servers(self) -> list[dict]:
-        # TODO 이 함수는 DB로 find_all 하면 나오는 정보라 삭제 예정
-        """
-        UC-0104 서버 대여 현황 조회
-        현재 시스템에 생성된 인스턴스 정보들을 한 번에 반환합니다.
-        서버 정보가 담긴 딕셔너리를 원소로하는 리스트가 반환됩니다.
-
-        딕셔너리의 정보는 아래와 같습니다.
-        Name: 서버의 이름
-        Floating-IP: 서버의 유동 IP
-        Date: 추가 예정
-
-        :return: 서버 딕셔너리 리스트
-        """
-
-        result = []
-
-        """
-        servers = self._connection.compute.servers()
-        for server in servers:
-            server_info = {"Name": server.name}
-            for addresses in server.addresses.values():
-                for address in addresses:
-                    if address["OS-EXT-IPS:type"] == "floating":
-                        server_info["Floating-IP"] = address["addr"]
-                        break
-            # TODO Date 정보 추가
-
-            result.append(server_info)
-
-        return result
-        """
-
-        servers = self._connection.compute.servers()
-        for server in servers:
-            server_info = {"name": server.name}
-            private_addresses = server["addresses"]["private"]
-
-            floating_ip = ""
-            if len(private_addresses) > 2:
-                floating_ip = private_addresses[2]['addr']
-            server_info["Floating-IP"] = floating_ip
-
-            server_info["start-date"] = ""
-            server_info["end-date"] = ""
-
-            result.append(server_info)
-
-        return result
+        self._connection = openstack.connect(auth_url=openstack_config['auth_url'],
+                                             username=openstack_config['username'],
+                                             password=openstack_config['password'],
+                                             project_name=openstack_config['project_name'],
+                                             domain_name=openstack_config['domain_name'])
 
     def monitoring_resources(self) -> dict:
         """
@@ -113,7 +68,7 @@ class OpenStackController:
 
         return self._connection.compute.find_server(server_name)
 
-    def create_server(self, server_info: ServerInfo) -> openstack.compute.v2.server.Server:
+    def create_server(self, server_info: ServerDTOForCreate) -> openstack.compute.v2.server.Server:
         """
         UC-0101 서버 대여 / UC-0202 인스턴스 생성
         서버 정보를 바탕으로 인스턴스를 생성합니다.
@@ -149,10 +104,12 @@ ssh_pwauth: True"""
             kwargs["userdata"] = cloud_init
 
         server = self._connection.create_server(**kwargs)
-        server = self._connection.compute.wait_for_server(server)
-        self._connection.add_auto_ip(server)
+        self._connection.compute.wait_for_server(server)
 
         return server
+
+    def allocate_floating_ip(self, server) -> str:
+        return self._connection.add_auto_ip(server, wait=True)
 
     def delete_server(self, server_name: str) -> None:
         """
@@ -179,6 +136,9 @@ ssh_pwauth: True"""
         :return: Image 객체
         """
         return self._connection.compute.find_image(image_name)
+
+    def find_images(self):
+        return self._connection.compute.images()
 
     def delete_image(self, image_name: str) -> None:
         """
@@ -395,6 +355,9 @@ ssh_pwauth: True"""
         :return: openstack.compute.v2.flavor.Flavor
         """
         return self._connection.compute.find_flavor(flavor_name)
+
+    def find_flavors(self) -> list[openstack.compute.v2.flavor.Flavor]:
+        return self._connection.compute.flavors()
 
     def create_flavor(self,
                       flavor_name: str,

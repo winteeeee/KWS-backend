@@ -1,8 +1,7 @@
-import datetime
 from pydantic import BaseModel
 
 
-class ServerInfo(BaseModel):
+class ServerDTOForCreate(BaseModel):
     user_name: str
     server_name: str
     image_name: str
@@ -10,5 +9,18 @@ class ServerInfo(BaseModel):
     network_name: str
     password: str | None
     cloud_init: str | None
-    start_date: datetime
-    end_date: datetime
+    start_date: str
+    end_date: str
+
+
+class ServerDTOForUpdate(BaseModel):
+    server_name: str
+    host_ip: str
+    password: str
+    end_date: str
+
+
+class ServerDTOForDelete(BaseModel):
+    server_name: str
+    host_ip: str
+    password: str

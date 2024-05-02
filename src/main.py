@@ -10,4 +10,4 @@ if __name__ == "__main__":
     scheduler_thread.daemon = True
     scheduler_thread.start()
 
-    uvicorn.run(app, host=server_config["host"], port=server_config["port"])
+    uvicorn.run(app, host=server_config["host"], port=server_config["port"], access_log=False)

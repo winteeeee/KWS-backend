@@ -1,24 +1,30 @@
+import os
 from datetime import date
 from fastapi import APIRouter
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database.factories import MySQLEngineFactory
 from model.db_models import Server
-from model.http_models import ServerDTOForCreate, ServerDTOForUpdate, ServerDTOForDelete
+from model.api_models import ServerCreateRequestDTO, ServerUpdateRequestDTO, ServerDeleteRequestDTO
 from openStack.openstack_controller import OpenStackController
 
 router = APIRouter(prefix="/openstack")
 controller = OpenStackController()
 db_connection = MySQLEngineFactory().get_instance()
 
-# TODO 1. 하루에 한 번씩 DB에서 end_date를 스캔하여 end_date가 지난 인스턴스 삭제
-# TODO 2. 로깅 구현
-# TODO 3. 키페어 프론트에서 구현되면 테스트 해보기
+
+# TODO cloud_init을 이용하여 user_name 변경시키기
+# TODO 프론트에서 키페어 받아올 수 있어야 함
 
 
 @router.post("/rental")
-def server_rent(server_info: ServerDTOForCreate):
+def server_rent(server_info: ServerCreateRequestDTO):
+    if server_info.password == "":
+        # 패스워드가 비워져 있으면 None으로 취급(키페어로 접속)
+        server_info.password = None
+
     server = controller.create_server(server_info)
     floating_ip = controller.allocate_floating_ip(server)
 
@@ -36,14 +42,24 @@ def server_rent(server_info: ServerDTOForCreate):
         session.add(server)
         session.commit()
 
-    return {"ip": floating_ip}
+    return {"ip": floating_ip, "private_key": FileResponse(f'{server_info.server_name}.pem')}
 
 
 @router.get("/servers")
 def server_show():
     with Session(db_connection) as session, session.begin():
         servers = session.scalars(select(Server)).all()
-        return servers
+        server_list = []
+        for server in servers:
+            server_dict = server.__dict__
+            server_list.append({
+                'user_name': server_dict['user_name'],
+                'server_name': server_dict['server_name'],
+                'floating_ip': server_dict['floating_ip'],
+                'start_date': server_dict['start_date'],
+                'end_date': server_dict['end_date']
+            })
+        return server_list
 
 
 @router.get("image_list")
@@ -74,7 +90,7 @@ def flavor_list_show():
 
 
 @router.delete("/return")
-def server_return(server_info: ServerDTOForDelete):
+def server_return(server_info: ServerDeleteRequestDTO):
     if controller.validate_ssh_key(host_name=server_info.host_ip,
                                    user_name=server_info.server_name,
                                    private_key=None,
@@ -86,11 +102,15 @@ def server_return(server_info: ServerDTOForDelete):
             ).one()
             session.delete(server)
             session.commit()
+
+        if os.path.exists(f'{server_info.server_name}_keypair.pem'):
+            os.remove(f'{server_info.server_name}_keypair.pem')
+
         controller.delete_server(server_info.server_name)
 
 
 @router.put("/extension")
-def server_renew(server_info: ServerDTOForUpdate):
+def server_renew(server_info: ServerUpdateRequestDTO):
     if controller.validate_ssh_key(host_name=server_info.host_ip,
                                    user_name=server_info.server_name,
                                    private_key=None,

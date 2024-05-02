@@ -2,7 +2,7 @@ import os
 import paramiko
 import openstack
 
-from model.http_models import ServerDTOForCreate
+from model.api_models import ServerCreateRequestDTO
 from config.config import openstack_config
 
 
@@ -68,7 +68,7 @@ class OpenStackController:
 
         return self._connection.compute.find_server(server_name)
 
-    def create_server(self, server_info: ServerDTOForCreate) -> openstack.compute.v2.server.Server:
+    def create_server(self, server_info: ServerCreateRequestDTO) -> openstack.compute.v2.server.Server:
         """
         UC-0101 서버 대여 / UC-0202 인스턴스 생성
         서버 정보를 바탕으로 인스턴스를 생성합니다.
@@ -114,17 +114,21 @@ ssh_pwauth: True"""
     def delete_server(self, server_name: str) -> None:
         """
         UC-0102 서버 반납 / UC-0203 인스턴스 삭제
-        서버에 할당된 유동 IP도 자동으로 삭제합니다.
+        서버에 할당된 유동 IP, 키페어도 자동으로 삭제합니다.
 
         :param server_name: 삭제할 서버 이름
         :return: 없음
         """
 
         server = self._connection.compute.find_server(server_name)
-        floating_ips = self._connection.network.ips(server_id=server.id, device_id=server.id)
 
+        floating_ips = self._connection.network.ips(server_id=server.id, device_id=server.id)
         for floating_ip in floating_ips:
             self._connection.network.delete_ip(floating_ip.id)
+
+        key_pair = self._connection.compute.find_keypair(f"{server_name}_keypair")
+        if key_pair is not None:
+            self._connection.compute.delete_keypair(key_pair)
 
         self._connection.compute.delete_server(server)
 

@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 
 
-class ServerDTOForCreate(BaseModel):
+class ServerCreateRequestDTO(BaseModel):
     user_name: str
     server_name: str
     image_name: str
@@ -13,14 +13,14 @@ class ServerDTOForCreate(BaseModel):
     end_date: str
 
 
-class ServerDTOForUpdate(BaseModel):
+class ServerUpdateRequestDTO(BaseModel):
     server_name: str
     host_ip: str
     password: str
     end_date: str
 
 
-class ServerDTOForDelete(BaseModel):
+class ServerDeleteRequestDTO(BaseModel):
     server_name: str
     host_ip: str
     password: str

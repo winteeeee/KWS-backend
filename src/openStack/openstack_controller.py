@@ -86,19 +86,18 @@ class OpenStackController:
             "network": self.find_network(server_info.network_name).id,
         }
 
-        if server_info.password is None:
+        if server_info.password == "":
             kwargs["key_name"] = self.find_key_pair(f"{server_info.server_name}_keypair").name
         else:
-            if server_info.cloud_init is not None:
+            if server_info.cloud_init != "":
                 cloud_init = server_info.cloud_init
             else:
                 cloud_init = "#cloud-config"
 
             cloud_init += f"""
-chpasswd:
- list: |
-   ubuntu:{server_info.password}
- expire: False
+user: {server_info.server_name}
+password: {server_info.password}
+chpasswd: {{expire: False}}
 ssh_pwauth: True"""
 
             kwargs["userdata"] = cloud_init

@@ -15,16 +15,11 @@ controller = OpenStackController()
 db_connection = MySQLEngineFactory().get_instance()
 
 
-# TODO cloud_init을 이용하여 user_name 변경시키기
 # TODO 프론트에서 키페어 받아올 수 있어야 함
 
 
 @router.post("/rental")
 def server_rent(server_info: ServerCreateRequestDTO):
-    if server_info.password == "":
-        # 패스워드가 비워져 있으면 None으로 취급(키페어로 접속)
-        server_info.password = None
-
     server = controller.create_server(server_info)
     floating_ip = controller.allocate_floating_ip(server)
 
@@ -42,7 +37,12 @@ def server_rent(server_info: ServerCreateRequestDTO):
         session.add(server)
         session.commit()
 
-    return {"ip": floating_ip, "private_key": FileResponse(f'{server_info.server_name}.pem')}
+    if server_info.password == "":
+        private_key = FileResponse(f'{server_info.server_name}.pem')
+    else:
+        private_key = None
+
+    return {"ip": floating_ip, "private_key": private_key}
 
 
 @router.get("/servers")

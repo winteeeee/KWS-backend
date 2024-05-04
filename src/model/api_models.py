@@ -11,16 +11,3 @@ class ServerCreateRequestDTO(BaseModel):
     cloud_init: str | None
     start_date: str
     end_date: str
-
-
-class ServerUpdateRequestDTO(BaseModel):
-    server_name: str
-    host_ip: str
-    password: str
-    end_date: str
-
-
-class ServerDeleteRequestDTO(BaseModel):
-    server_name: str
-    host_ip: str
-    password: str

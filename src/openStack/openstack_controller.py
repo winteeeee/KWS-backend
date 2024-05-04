@@ -87,8 +87,11 @@ class OpenStackController:
         }
 
         if server_info.password == "":
-            kwargs["key_name"] = self.find_key_pair(f"{server_info.server_name}_keypair").name
+            keypair = self.find_key_pair(f"{server_info.server_name}_keypair")
+            private_key = keypair.private_key
+            kwargs["key_name"] = keypair.name
         else:
+            private_key = ""
             if server_info.cloud_init != "":
                 cloud_init = server_info.cloud_init
             else:
@@ -105,7 +108,7 @@ ssh_pwauth: True"""
         server = self._connection.create_server(**kwargs)
         self._connection.compute.wait_for_server(server)
 
-        return server
+        return server, private_key
 
     def allocate_floating_ip(self, server) -> str:
         return self._connection.add_auto_ip(server, wait=True)
@@ -398,10 +401,6 @@ ssh_pwauth: True"""
         """
 
         keypair = self._connection.compute.create_keypair(name=keypair_name)
-
-        with open(f"{keypair_name}.pem", "w") as f:
-            f.write(keypair.private_key)
-
         return keypair
 
     def find_key_pair(self, keypair_name) -> openstack.compute.v2.keypair.Keypair:
@@ -428,11 +427,8 @@ ssh_pwauth: True"""
         user_name = kwargs['user_name']
 
         try:
-            if kwargs['private_key']:
-                with open("cloud.key", "wb") as private_key:
-                    private_key.write(kwargs['private_key'])
-
-                key = paramiko.RSAKey.from_private_key_file('cloud.key')
+            if kwargs['private_key'] != "":
+                key = paramiko.RSAKey.from_private_key(kwargs['private_key'])
                 client.connect(hostname=host_name, username=user_name, pkey=key)
             else:
                 client.connect(hostname=host_name, username=user_name, password=kwargs['password'])
@@ -440,7 +436,5 @@ ssh_pwauth: True"""
             return False
         finally:
             client.close()
-            if os.path.exists("cloud.key"):
-                os.remove("cloud.key")
 
         return True

@@ -19,10 +19,6 @@ def delete_expired_data():
         expired_servers = session.query(Server).filter(Server.end_date < today).all()
         for server in expired_servers:
             session.delete(server)
-
-            if os.path.exists(f'{server.server_name}_keypair.pem'):
-                os.remove(f'{server.server_name}_keypair.pem')
-
             controller.delete_server(server.server_name)
         session.commit()
 

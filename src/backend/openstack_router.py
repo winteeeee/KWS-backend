@@ -1,13 +1,12 @@
-import os
+import io
 from datetime import date
-from fastapi import APIRouter
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Form, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database.factories import MySQLEngineFactory
 from model.db_models import Server
-from model.api_models import ServerCreateRequestDTO, ServerUpdateRequestDTO, ServerDeleteRequestDTO
+from model.api_models import ServerCreateRequestDTO
 from openStack.openstack_controller import OpenStackController
 
 router = APIRouter(prefix="/openstack")
@@ -15,12 +14,9 @@ controller = OpenStackController()
 db_connection = MySQLEngineFactory().get_instance()
 
 
-# TODO 프론트에서 키페어 받아올 수 있어야 함
-
-
 @router.post("/rental")
 def server_rent(server_info: ServerCreateRequestDTO):
-    server = controller.create_server(server_info)
+    server, private_key = controller.create_server(server_info)
     floating_ip = controller.allocate_floating_ip(server)
 
     flavor = controller.find_flavor(flavor_name=server_info.flavor_name)
@@ -36,11 +32,6 @@ def server_rent(server_info: ServerCreateRequestDTO):
         )
         session.add(server)
         session.commit()
-
-    if server_info.password == "":
-        private_key = FileResponse(f'{server_info.server_name}.pem')
-    else:
-        private_key = None
 
     return {"ip": floating_ip, "private_key": private_key}
 
@@ -62,7 +53,7 @@ def server_show():
         return server_list
 
 
-@router.get("image_list")
+@router.get("/image_list")
 def image_list_show():
     images = controller.find_images()
     image_list = []
@@ -86,41 +77,50 @@ def flavor_list_show():
             "disk": flavor.disk
         })
 
-    return flavor_list
+    return sorted(flavor_list, key=lambda f: (f['cpu'], f['ram'], f['disk']))
 
 
 @router.delete("/return")
-def server_return(server_info: ServerDeleteRequestDTO):
-    if controller.validate_ssh_key(host_name=server_info.host_ip,
-                                   user_name=server_info.server_name,
-                                   private_key=None,
-                                   password=server_info.password):
+async def server_return(server_name: str = Form(...),
+                        host_ip: str = Form(...),
+                        password: str = Form(""),
+                        key_file: UploadFile = Form("")):
+    if key_file != "":
+        key_file = io.StringIO(key_file.file.read().decode('utf-8'))
+
+    if controller.validate_ssh_key(host_name=host_ip,
+                                   user_name=server_name,
+                                   private_key=key_file,
+                                   password=password):
         with Session(db_connection) as session, session.begin():
             server = session.scalars(
                 select(Server)
-                .where(Server.server_name == server_info.server_name)
+                .where(Server.server_name == server_name)
             ).one()
             session.delete(server)
             session.commit()
-
-        if os.path.exists(f'{server_info.server_name}_keypair.pem'):
-            os.remove(f'{server_info.server_name}_keypair.pem')
-
-        controller.delete_server(server_info.server_name)
+        controller.delete_server(server_name)
 
 
 @router.put("/extension")
-def server_renew(server_info: ServerUpdateRequestDTO):
-    if controller.validate_ssh_key(host_name=server_info.host_ip,
-                                   user_name=server_info.server_name,
-                                   private_key=None,
-                                   password=server_info.password):
+def server_renew(server_name: str = Form(...),
+                 host_ip: str = Form(...),
+                 end_date: str = Form(...),
+                 password: str = Form(""),
+                 key_file: UploadFile = Form("")):
+    if key_file != "":
+        key_file = io.StringIO(key_file.file.read().decode('utf-8'))
+
+    if controller.validate_ssh_key(host_name=host_ip,
+                                   user_name=server_name,
+                                   private_key=key_file,
+                                   password=password):
         with Session(db_connection) as session, session.begin():
             server = session.scalars(
                 select(Server)
-                .where(Server.server_name == server_info.server_name)
+                .where(Server.server_name == server_name)
             ).one()
-            split_date = server_info.end_date.split(sep='-')
+            split_date = end_date.split(sep='-')
             server.end_date = date(int(split_date[0]), int(split_date[1]), int(split_date[2]))
             session.add(server)
             session.commit()

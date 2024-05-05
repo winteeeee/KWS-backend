@@ -8,6 +8,7 @@ from database.factories import MySQLEngineFactory
 from model.db_models import Server
 from model.api_models import ServerCreateRequestDTO
 from openStack.openstack_controller import OpenStackController
+from util.utils import validate_ssh_key
 
 router = APIRouter(prefix="/openstack")
 controller = OpenStackController()
@@ -93,10 +94,10 @@ async def server_return(server_name: str = Form(...),
     if key_file != "":
         key_file = io.StringIO(key_file.file.read().decode('utf-8'))
 
-    if controller.validate_ssh_key(host_name=host_ip,
-                                   user_name=server_name,
-                                   private_key=key_file,
-                                   password=password):
+    if validate_ssh_key(host_name=host_ip,
+                        user_name=server_name,
+                        private_key=key_file,
+                        password=password):
         with Session(db_connection) as session, session.begin():
             server = session.scalars(
                 select(Server)
@@ -116,10 +117,10 @@ def server_renew(server_name: str = Form(...),
     if key_file != "":
         key_file = io.StringIO(key_file.file.read().decode('utf-8'))
 
-    if controller.validate_ssh_key(host_name=host_ip,
-                                   user_name=server_name,
-                                   private_key=key_file,
-                                   password=password):
+    if validate_ssh_key(host_name=host_ip,
+                        user_name=server_name,
+                        private_key=key_file,
+                        password=password):
         with Session(db_connection) as session, session.begin():
             server = session.scalars(
                 select(Server)

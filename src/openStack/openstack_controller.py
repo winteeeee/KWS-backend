@@ -1,9 +1,8 @@
-import os
-import paramiko
 import openstack
 
 from model.api_models import ServerCreateRequestDTO
 from config.config import openstack_config
+from util.utils import cloud_init_creator
 
 
 class OpenStackController:
@@ -92,18 +91,14 @@ class OpenStackController:
             kwargs["key_name"] = keypair.name
         else:
             private_key = ""
-            if server_info.cloud_init != "":
-                cloud_init = server_info.cloud_init
-            else:
-                cloud_init = "#cloud-config"
 
-            cloud_init += f"""
-user: {server_info.server_name}
-password: {server_info.password}
-chpasswd: {{expire: False}}
-ssh_pwauth: True"""
+        if server_info.cloud_init != "":
+            cloud_init = server_info.cloud_init
+        else:
+            cloud_init = cloud_init_creator(server_name=server_info.server_name,
+                                            password=server_info.password)
 
-            kwargs["userdata"] = cloud_init
+        kwargs["userdata"] = cloud_init
 
         server = self._connection.create_server(**kwargs)
         self._connection.compute.wait_for_server(server)
@@ -418,23 +413,3 @@ ssh_pwauth: True"""
             keypair = self.create_key_pair(keypair_name)
 
         return keypair
-
-    def validate_ssh_key(self, **kwargs) -> bool:
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-        host_name = kwargs['host_name']
-        user_name = kwargs['user_name']
-
-        try:
-            if kwargs['private_key'] != "":
-                key = paramiko.RSAKey.from_private_key(kwargs['private_key'])
-                client.connect(hostname=host_name, username=user_name, pkey=key)
-            else:
-                client.connect(hostname=host_name, username=user_name, password=kwargs['password'])
-        except (paramiko.SSHException, FileNotFoundError):
-            return False
-        finally:
-            client.close()
-
-        return True

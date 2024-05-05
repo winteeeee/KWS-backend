@@ -33,7 +33,12 @@ def server_rent(server_info: ServerCreateRequestDTO):
         session.add(server)
         session.commit()
 
-    return {"ip": floating_ip, "private_key": private_key}
+    if private_key == "":
+        name = ""
+    else:
+        name = f'{server_info.server_name}_keypair.pem'
+
+    return {"name": name, "data": private_key}
 
 
 @router.get("/servers")

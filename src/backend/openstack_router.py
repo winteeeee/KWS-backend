@@ -105,7 +105,7 @@ async def server_return(server_name: str = Form(...),
             ).one()
             session.delete(server)
             session.commit()
-        controller.delete_server(server_name)
+        controller.delete_server(server_name, host_ip)
 
 
 @router.put("/extension")

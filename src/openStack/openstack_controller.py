@@ -108,7 +108,7 @@ class OpenStackController:
     def allocate_floating_ip(self, server) -> str:
         return self._connection.add_auto_ip(server, wait=True)
 
-    def delete_server(self, server_name: str) -> None:
+    def delete_server(self, server_name: str, server_ip: str) -> None:
         """
         UC-0102 서버 반납 / UC-0203 인스턴스 삭제
         서버에 할당된 유동 IP, 키페어도 자동으로 삭제합니다.
@@ -121,7 +121,8 @@ class OpenStackController:
 
         floating_ips = self._connection.network.ips(server_id=server.id, device_id=server.id)
         for floating_ip in floating_ips:
-            self._connection.network.delete_ip(floating_ip.id)
+            if floating_ip.floating_ip_address == server_ip:
+                self._connection.network.delete_ip(floating_ip.id)
 
         key_pair = self._connection.compute.find_keypair(f"{server_name}_keypair")
         if key_pair is not None:

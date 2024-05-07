@@ -34,11 +34,11 @@ def server_rent(server_info: ServerCreateRequestDTO):
                 floating_ip=floating_ip
             )
             session.add(server)
+            session.commit()
         except:
             session.rollback()
             controller.delete_server(server, floating_ip)
             return status.HTTP_500_INTERNAL_SERVER_ERROR
-        session.commit()
         
     name = f'{server_info.server_name}_keypair.pem' if private_key != "" else ""
     return {"name": name, "data": private_key}
@@ -117,10 +117,10 @@ async def server_return(server_name: str = Form(...),
                 ).one()
                 session.delete(server)
                 controller.delete_server(server_name, host_ip)
+                session.commit()
             except:
                 session.rollback()
                 return status.HTTP_500_INTERNAL_SERVER_ERROR
-            session.commit()
     else:
         return status.HTTP_400_BAD_REQUEST
 
@@ -147,9 +147,9 @@ def server_renew(server_name: str = Form(...),
                 split_date = end_date.split(sep='-')
                 server.end_date = date(int(split_date[0]), int(split_date[1]), int(split_date[2]))
                 session.add(server)
+                session.commit()
             except:
                 session.rollback()
                 return status.HTTP_500_INTERNAL_SERVER_ERROR
-            session.commit()
     else:
         return status.HTTP_400_BAD_REQUEST

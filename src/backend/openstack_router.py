@@ -17,14 +17,10 @@ db_connection = MySQLEngineFactory().get_instance()
 
 @router.post("/rental")
 def server_rent(server_info: ServerCreateRequestDTO):
-    try:
-        server, private_key = controller.create_server(server_info)
-    except:
-        return status.HTTP_500_INTERNAL_SERVER_ERROR
-
     with Session(db_connection) as session:
         session.begin()
         try:
+            server, private_key = controller.create_server(server_info)
             floating_ip = controller.allocate_floating_ip(server)
             flavor = controller.find_flavor(flavor_name=server_info.flavor_name)
 

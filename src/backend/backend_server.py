@@ -3,6 +3,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.openstack_router import router
+from config.config import server_config
 from util.logger import get_logger
 
 backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/backend")
@@ -16,7 +17,8 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
 
 origins = [
-    "http://localhost:3000"
+    "http://localhost:3000",
+    f"http://{server_config['frontend']['host']}:{server_config['frontend']['port']}"
 ]
 
 app = FastAPI()

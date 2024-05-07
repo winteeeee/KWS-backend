@@ -108,12 +108,13 @@ class OpenStackController:
     def allocate_floating_ip(self, server) -> str:
         return self._connection.add_auto_ip(server, wait=True)
 
-    def delete_server(self, server_name: str, server_ip: str) -> None:
+    def delete_server(self, server_name: str, server_ip: str = "") -> None:
         """
         UC-0102 서버 반납 / UC-0203 인스턴스 삭제
         서버에 할당된 유동 IP, 키페어도 자동으로 삭제합니다.
 
         :param server_name: 삭제할 서버 이름
+        :param server_ip: 삭제할 서버의 유동 아이피
         :return: 없음
         """
 

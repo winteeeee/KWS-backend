@@ -17,6 +17,9 @@ db_connection = MySQLEngineFactory().get_instance()
 
 @router.post("/rental")
 def server_rent(server_info: ServerCreateRequestDTO):
+    if controller.find_server(server_info.server_name) is not None:
+        return status.HTTP_400_BAD_REQUEST
+
     with Session(db_connection) as session:
         session.begin()
         try:
@@ -37,7 +40,7 @@ def server_rent(server_info: ServerCreateRequestDTO):
             session.commit()
         except:
             session.rollback()
-            controller.delete_server(server, floating_ip)
+            controller.delete_server(server_info.server_name, floating_ip)
             return status.HTTP_500_INTERNAL_SERVER_ERROR
         
     name = f'{server_info.server_name}_keypair.pem' if private_key != "" else ""

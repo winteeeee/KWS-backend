@@ -24,12 +24,14 @@ class OpenStackController:
         count: 현재 생성된 서버의 수
         vcpus: 현재 사용되는 cpu 코어 개수
         ram: 현재 사용되는 RAM 용량(GB)
+        disk: 현재 사용되는 Disk 용량(GB)
 
         :return: 자원 딕셔너리
         """
         count = 0
         vcpus = 0
         ram = 0
+        disk = 0
 
         servers = self._connection.compute.servers()
 
@@ -37,11 +39,13 @@ class OpenStackController:
             count += 1
             vcpus += server.flavor["vcpus"]
             ram += server.flavor["ram"]
+            disk += server.flavor["disk"]
 
         result = {
             "count": count,
             "vcpus": vcpus,
-            "ram": int(ram / 1024)
+            "ram": float(ram / 1024),
+            "disk": disk
         }
 
         return result

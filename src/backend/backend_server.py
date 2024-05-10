@@ -2,7 +2,8 @@ from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.openstack_router import router
+from backend.openstack_router import openstack_router
+from backend.db_router import db_router
 from config.config import server_config
 from util.logger import get_logger
 
@@ -22,7 +23,8 @@ origins = [
 ]
 
 app = FastAPI()
-app.include_router(router)
+app.include_router(openstack_router)
+app.include_router(db_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,

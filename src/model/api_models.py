@@ -10,6 +10,9 @@ class ServerCreateRequestDTO(BaseModel):
     end_date: str
     image_name: str
     flavor_name: str
+    vcpus: int | None
+    ram: int | None
+    disk: int | None
     network_name: str
     password: str | None
     cloud_init: str | None

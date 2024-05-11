@@ -2,7 +2,8 @@ import paramiko
 
 
 def cloud_init_creator(server_name: str,
-                       password: str):
+                       password: str,
+                       user_data: str):
     cloud_init = "#cloud-config"
     cloud_init += f"\nuser: {server_name}"
 
@@ -10,6 +11,9 @@ def cloud_init_creator(server_name: str,
         cloud_init += f"\npassword: {password}"
         cloud_init += "\nchpasswd: {expire: False}"
         cloud_init += f"\nssh_pwauth: True"
+
+    if user_data != "":
+        cloud_init += "\n" + user_data
 
     return cloud_init
 

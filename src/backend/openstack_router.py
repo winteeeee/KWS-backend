@@ -23,6 +23,12 @@ def server_rent(server_info: ServerCreateRequestDTO):
     with Session(db_connection) as session:
         session.begin()
         try:
+            if controller.find_flavor(server_info.flavor_name) is None:
+                controller.create_flavor(flavor_name=server_info.flavor_name,
+                                         vcpus=server_info.vcpus,
+                                         ram=server_info.ram,
+                                         disk=server_info.disk)
+
             server, private_key = controller.create_server(server_info)
             floating_ip = controller.allocate_floating_ip(server)
 
@@ -93,6 +99,8 @@ async def server_return(server_name: str = Form(...),
                 ).one()
                 session.delete(server)
                 controller.delete_server(server_name, host_ip)
+                if controller.find_flavor(f'{server_name}_flavor') is not None:
+                    controller.delete_flavor(f'{server_name}_flavor')
                 session.commit()
             except:
                 session.rollback()

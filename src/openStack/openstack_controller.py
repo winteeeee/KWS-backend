@@ -96,12 +96,9 @@ class OpenStackController:
         else:
             private_key = ""
 
-        if server_info.cloud_init != "":
-            cloud_init = server_info.cloud_init
-        else:
-            cloud_init = cloud_init_creator(server_name=server_info.server_name,
-                                            password=server_info.password)
-
+        cloud_init = cloud_init_creator(server_name=server_info.server_name,
+                                        password=server_info.password,
+                                        user_data=server_info.cloud_init)
         kwargs["userdata"] = cloud_init
 
         server = self._connection.create_server(**kwargs)
@@ -368,20 +365,20 @@ class OpenStackController:
 
     def create_flavor(self,
                       flavor_name: str,
-                      cpu: int,
+                      vcpus: int,
                       ram: int,
                       disk: int) -> openstack.compute.v2.flavor.Flavor:
         """
         UC-0223 플레이버 생성
 
         :param flavor_name: 생성할 플레이버 이름
-        :param cpu: 플레이버의 vcpu 수
+        :param vcpus: 플레이버의 vcpu 수
         :param ram: 플레이버의 RAM 용량(MB)
         :param disk: 플레이버의 디스크 용량(GB)
         :return: openstack.compute.v2.flavor.Flavor
         """
 
-        return self._connection.compute.create_flavor(name=flavor_name, vcpus=cpu, ram=ram, disk=disk)
+        return self._connection.compute.create_flavor(name=flavor_name, vcpus=vcpus, ram=ram, disk=disk)
 
     def delete_flavor(self, flavor_name: str) -> None:
         """

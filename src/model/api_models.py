@@ -1,6 +1,8 @@
+import json
 from datetime import datetime
 
 from pydantic import BaseModel
+from fastapi import Response
 
 
 class ServerCreateRequestDTO(BaseModel):
@@ -19,10 +21,21 @@ class ServerCreateRequestDTO(BaseModel):
     node_name: str
 
 
-class ApiResponse:
+class ApiResponse(Response):
     def __init__(self, code: int, data: object):
-        self.code = code
-        self.data = data
+        super().__init__(
+            media_type="application/json",
+            status_code=code,
+            content=json.dumps(data, default=str)
+        )
+
+
+class ErrorResponse(Response):
+    def __init__(self, code:int, message: str):
+        super().__init__(
+            status_code=code,
+            content=message
+        )
 
 
 class ServerRentalResponseDTO:
@@ -66,9 +79,24 @@ class ServersResponseDTO:
         self.image_name = image_name
 
 
-class ResourcesResponseDTO:
+class ResourceDTO:
     def __init__(self, count: int, vcpus: int, ram: float, disk: int):
         self.count = count
         self.vcpus = vcpus
         self.ram = ram
         self.disk = disk
+
+
+class NodeResourceDTO:
+    def __init__(self, name: str, count: int, vcpus: int, ram: float, disk: int):
+        self.name = name
+        self.count = count
+        self.vcpus = vcpus
+        self.ram = ram
+        self.disk = disk
+
+
+class ResourcesResponseDTO:
+    def __init__(self, total_resource: dict, nodes_resource: list[dict]):
+        self.total_resources = total_resource
+        self.nodes_resources = nodes_resource

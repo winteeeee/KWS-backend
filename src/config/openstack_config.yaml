@@ -3,3 +3,6 @@ username: "admin"
 password: "1234"
 project_name: "admin"
 domain_name: "default"
+compute_node_names:
+  - "compute_node1"
+  - "compute_node2"

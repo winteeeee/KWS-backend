@@ -8,3 +8,6 @@ with open("config/openstack_config.yaml") as yml:
 
 with open("config/db_config.yaml") as yml:
     db_config = yaml.full_load(yml)
+
+with open("config/node_config.yaml") as yml:
+    node_config = yaml.full_load(yml)

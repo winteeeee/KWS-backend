@@ -121,16 +121,17 @@ class OpenStackController:
 
         server = self._connection.compute.find_server(server_name)
 
-        floating_ips = self._connection.network.ips(server_id=server.id, device_id=server.id)
-        for floating_ip in floating_ips:
-            if floating_ip.floating_ip_address == server_ip:
-                self._connection.network.delete_ip(floating_ip.id)
+        if server is not None:
+            floating_ips = self._connection.network.ips(server_id=server.id, device_id=server.id)
+            for floating_ip in floating_ips:
+                if floating_ip.floating_ip_address == server_ip:
+                    self._connection.network.delete_ip(floating_ip.id)
 
-        key_pair = self._connection.compute.find_keypair(f"{server_name}_keypair")
-        if key_pair is not None:
-            self._connection.compute.delete_keypair(key_pair)
+            key_pair = self._connection.compute.find_keypair(f"{server_name}_keypair")
+            if key_pair is not None:
+                self._connection.compute.delete_keypair(key_pair)
 
-        self._connection.compute.delete_server(server)
+            self._connection.compute.delete_server(server)
 
     def find_image(self, image_name: str) -> openstack.compute.v2.image.Image:
         """
@@ -152,7 +153,9 @@ class OpenStackController:
         :return: 없음
         """
 
-        self._connection.compute.delete_image(self.find_image(image_name))
+        image = self.find_image(image_name)
+        if image is not None:
+            self._connection.compute.delete_image(image)
     
     def find_network(self, network_name: str) -> openstack.network.v2.network.Network:
         """
@@ -162,6 +165,9 @@ class OpenStackController:
         :return: openstack.network.v2.network.Network
         """
         return self._connection.network.find_network(network_name)
+
+    def find_networks(self) -> list[openstack.network.v2.network.Network]:
+        return self._connection.network.networks()
 
     def create_network(self,
                        network_name: str,
@@ -202,18 +208,20 @@ class OpenStackController:
         :return: 없음
         """
 
-        self._connection.network.delete_network(self.find_network(network_name))
+        network = self.find_network(network_name)
+        if network is not None:
+            self._connection.network.delete_network(network)
     
     def find_subnet(self, subnet_name: str) -> openstack.network.v2.subnet.Subnet:
         """
         UC-0214 서브넷 조회
 
-        :param subnet_name: 조회할 서브넷 이름
+        :param subnet_name: 조회할 서브넷 이름(ID도 가능)
         :return: openstack.network.v2.subnet.Subnet
         """
 
         return self._connection.network.find_subnet(subnet_name)
-    
+
     def create_subnet(self,
                       subnet_name: str,
                       ip_version: int,
@@ -235,7 +243,8 @@ class OpenStackController:
                                                       ip_version=ip_version,
                                                       cidr=subnet_address,
                                                       gateway_ip=subnet_gateway,
-                                                      network_id=self.find_network(network_name).id)
+                                                      network_id=self.find_network(network_name).id,
+                                                      dns_nameservers= ['8.8.8.8'])
 
     def update_subnet(self,
                       subnet_name: str,
@@ -270,7 +279,9 @@ class OpenStackController:
         :return: 없음
         """
 
-        self._connection.network.delete_subnet(self.find_subnet(subnet_name))
+        subnet = self.find_subnet(subnet_name)
+        if subnet is not None:
+            self._connection.network.delete_subnet(subnet)
 
     def find_router(self, router_name: str) -> openstack.network.v2.router.Router:
         """
@@ -329,6 +340,11 @@ class OpenStackController:
         return self._connection.network.add_interface_to_router(router=self.find_router(router_name),
                                                                 subnet_id=self.find_subnet(internal_subnet_name).id)
 
+    def remove_interface_from_router(self, router_name: str, internal_subnet_name: str) \
+            -> None:
+        return self._connection.network.remove_interface_from_router(router=self.find_router(router_name),
+                                                                     subnet_id=self.find_subnet(internal_subnet_name).id)
+
     def update_router(self, router_name: str, new_name: str) -> openstack.network.v2.router.Router:
         """
         UC-0220 라우터 수정
@@ -349,7 +365,9 @@ class OpenStackController:
         :return: 없음
         """
 
-        self._connection.network.delete_router(self.find_router(router_name))
+        router = self.find_router(router_name)
+        if router is not None:
+            self._connection.network.delete_router(router)
     
     def find_flavor(self, flavor_name: str) -> openstack.compute.v2.flavor.Flavor:
         """
@@ -388,7 +406,9 @@ class OpenStackController:
         :return: 없음
         """
 
-        self._connection.compute.delete_flavor(self.find_flavor(flavor_name))
+        flavor = self.find_flavor(flavor_name)
+        if flavor is not None:
+            self._connection.compute.delete_flavor(flavor)
 
     def create_key_pair(self, keypair_name) -> openstack.compute.v2.keypair.Keypair:
         """
@@ -416,3 +436,6 @@ class OpenStackController:
             keypair = self.create_key_pair(keypair_name)
 
         return keypair
+
+    def find_ports(self, network_id: str):
+        return self._connection.network.ports(network_id=network_id)

@@ -37,3 +37,16 @@ def validate_ssh_key(**kwargs) -> bool:
         client.close()
 
     return True
+
+
+def gateway_extractor(cidr: str):
+    # EX) 192.168.0.0/24 -> 192.168.0.1 반환
+    return cidr[:-4] + '1'
+
+
+def generator_len(generator: object):
+    count = 0
+    for _ in generator:
+        count += 1
+
+    return count

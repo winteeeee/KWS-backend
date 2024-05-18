@@ -16,6 +16,7 @@ class ServerCreateRequestDTO(BaseModel):
     ram: int | None
     disk: int | None
     network_name: str
+    subnet_cidr: str | None
     password: str | None
     cloud_init: str | None
     node_name: str
@@ -100,3 +101,23 @@ class ResourcesResponseDTO:
     def __init__(self, total_resource: dict, nodes_resource: list[dict]):
         self.total_resources = total_resource
         self.nodes_resources = nodes_resource
+
+
+class NetworkResponseDTO:
+    def __init__(self, name: str, subnet_cidr: str):
+        self.name = name
+        self.subnet_cidr = subnet_cidr
+
+
+class NodesSpecResponseDTO:
+    def __init__(self, total_spec: dict, nodes_spec: list[dict]):
+        self.total_spec = total_spec
+        self.nodes_spec = nodes_spec
+
+
+class NodeSpecDTO:
+    def __init__(self, name: str, vcpu: int, ram: int, disk: int):
+        self.name = name
+        self.vcpu = vcpu
+        self.ram = ram
+        self.disk = disk

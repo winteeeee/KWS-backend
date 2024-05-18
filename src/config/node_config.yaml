@@ -1,0 +1,14 @@
+controller:
+  name: "kws"
+  vcpu: 0
+  ram: 0
+  disk: 0
+compute:
+  - name: "compute_node1"
+    vcpu: 6
+    ram: 8
+    disk: 80
+  - name: "compute_node2"
+    vcpu: 6
+    ram: 8
+    disk: 80

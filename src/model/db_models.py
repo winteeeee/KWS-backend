@@ -20,3 +20,13 @@ class Server(Base):
     node_name: Mapped[str] = mapped_column(String(45))
     flavor_name: Mapped[str] = mapped_column(String(45))
     image_name: Mapped[str] = mapped_column(String(45))
+
+
+class Node(Base):
+    __tablename__ = "node"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(45), unique=True)
+    vcpu: Mapped[int] = mapped_column(Integer)
+    ram: Mapped[int] = mapped_column(Integer)
+    disk: Mapped[int] = mapped_column(Integer)

@@ -73,7 +73,7 @@ def nodes_spec():
             node = session.scalars(select(Node).where(Node.name == compute['name'])).one()
             vcpu += node.vcpu
             ram += node.ram
-            disk = node.disk
+            disk += node.disk
 
             node_dict = node.__dict__
             del node_dict['id']

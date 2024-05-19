@@ -80,7 +80,7 @@ class ServersResponseDTO:
         self.image_name = image_name
 
 
-class ResourceDTO:
+class UsingResourceDTO:
     def __init__(self, count: int, vcpus: int, ram: float, disk: int):
         self.count = count
         self.vcpus = vcpus
@@ -88,25 +88,13 @@ class ResourceDTO:
         self.disk = disk
 
 
-class NodeResourceDTO:
+class NodeUsingResourceDTO:
     def __init__(self, name: str, count: int, vcpus: int, ram: float, disk: int):
         self.name = name
         self.count = count
         self.vcpus = vcpus
         self.ram = ram
         self.disk = disk
-
-
-class ResourcesResponseDTO:
-    def __init__(self, total_resource: dict, nodes_resource: list[dict]):
-        self.total_resources = total_resource
-        self.nodes_resources = nodes_resource
-
-
-class NetworkResponseDTO:
-    def __init__(self, name: str, subnet_cidr: str):
-        self.name = name
-        self.subnet_cidr = subnet_cidr
 
 
 class NodesSpecResponseDTO:
@@ -121,3 +109,21 @@ class NodeSpecDTO:
         self.vcpu = vcpu
         self.ram = ram
         self.disk = disk
+
+
+class ResourceResponseDTO:
+    def __init__(self, limit_resources: dict, using_resources: dict):
+        self.limit_resources = limit_resources
+        self.using_resources = using_resources
+
+
+class UsingResourcesResponseDTO:
+    def __init__(self, total_resource: dict, nodes_resource: list[dict]):
+        self.total_resources = total_resource
+        self.nodes_resources = nodes_resource
+
+
+class NetworkResponseDTO:
+    def __init__(self, name: str, subnet_cidr: str):
+        self.name = name
+        self.subnet_cidr = subnet_cidr

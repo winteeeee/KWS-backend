@@ -4,10 +4,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database.factories import MySQLEngineFactory
-from model.db_models import Server
+from model.db_models import Server, Node
 from model.api_models import (ApiResponse, ServerCreateRequestDTO, ServerRentalResponseDTO, ImageListResponseDTO,
-                              FlavorListResponseDTO, ResourceDTO, ResourcesResponseDTO, NodeResourceDTO, ErrorResponse,
-                              NetworkResponseDTO)
+                              FlavorListResponseDTO, UsingResourceDTO, UsingResourcesResponseDTO, NodeUsingResourceDTO, ErrorResponse,
+                              NetworkResponseDTO, NodeSpecDTO, NodesSpecResponseDTO, ResourceResponseDTO)
 from openStack.openstack_controller import OpenStackController
 from util.utils import validate_ssh_key, gateway_extractor, generator_len
 from config.config import openstack_config, node_config
@@ -176,34 +176,51 @@ async def server_return(server_name: str = Form(...),
 
 @openstack_router.get("/resources")
 def get_resources():
-    total = ResourceDTO(**controller.monitoring_resources()).__dict__
-    nodes = []
-
     with Session(db_connection) as session, session.begin():
+        limit_total_resource = {}
+        using_total_resource = UsingResourceDTO(**controller.monitoring_resources()).__dict__
+        limit_resource_by_node = []
+        using_resource_by_node = []
+        total_limit_vcpu = 0
+        total_limit_ram = 0
+        total_limit_disk = 0
+
         for node in node_config['compute']:
+            compute_node = session.scalars(select(Node).where(Node.name == node['name'])).one()
             servers = session.scalars(select(Server).where(Server.node_name == node['name']))
-            count = 0
-            vcpus = 0
-            ram = 0
-            disk = 0
+
+            server_count = 0
+            using_vcpus = 0
+            using_ram = 0
+            using_disk = 0
+            total_limit_vcpu += compute_node.vcpu
+            total_limit_ram += compute_node.ram
+            total_limit_disk += compute_node.disk
 
             for server in servers:
-                count += 1
+                server_count += 1
                 flavor = controller.find_flavor(flavor_name=server.flavor_name)
-                vcpus += flavor.vcpus
-                ram += flavor.ram
-                disk += flavor.disk
+                using_vcpus += flavor.vcpus
+                using_ram += flavor.ram
+                using_disk += flavor.disk
 
-            resource_dict = {
-                "name": node['name'],
-                "count": count,
-                "vcpus": vcpus,
-                "ram": float(ram / 1024),
-                "disk": disk
-            }
+            using_resource_by_node.append(NodeUsingResourceDTO(name=node['name'],
+                                                               count=server_count,
+                                                               vcpus=using_vcpus,
+                                                               ram=float(using_ram / 1024),
+                                                               disk=using_disk).__dict__)
+            compute_node_dict = compute_node.__dict__
+            del compute_node_dict['id']
+            del compute_node_dict['_sa_instance_state']
+            limit_resource_by_node.append(NodeSpecDTO(**compute_node_dict).__dict__)
 
-            nodes.append(NodeResourceDTO(**resource_dict).__dict__)
-    return ApiResponse(status.HTTP_200_OK, ResourcesResponseDTO(total, nodes).__dict__)
+        limit_total_resource = {'vcpu': total_limit_vcpu, 'ram': total_limit_ram, 'disk': total_limit_disk}
+        limit_resources = NodesSpecResponseDTO(total_spec=limit_total_resource,
+                                               nodes_spec=limit_resource_by_node).__dict__
+        using_resources = UsingResourcesResponseDTO(total_resource=using_total_resource,
+                                                    nodes_resource=using_resource_by_node).__dict__
+    return ApiResponse(status.HTTP_200_OK, ResourceResponseDTO(limit_resources=limit_resources,
+                                                               using_resources=using_resources).__dict__)
 
 
 @openstack_router.get("/networks")

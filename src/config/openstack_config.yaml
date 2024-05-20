@@ -5,7 +5,7 @@ project_name: "admin"
 domain_name: "default"
 external_network: "public"
 external_network_subnet: "public-subnet"
-default_internal_network: "shared"
+default_internal_network: "default"
 default_flavors:
   - "kws_small"
   - "kws_medium"

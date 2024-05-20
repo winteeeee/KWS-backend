@@ -1,4 +1,5 @@
 import openstack
+from zunclient import client
 
 from model.api_models import ServerCreateRequestDTO
 from config.config import openstack_config
@@ -7,12 +8,18 @@ from util.utils import cloud_init_creator
 
 class OpenStackController:
     def __init__(self):
-        # TODO 로그 추가
         self._connection = openstack.connect(auth_url=openstack_config['auth_url'],
                                              username=openstack_config['username'],
                                              password=openstack_config['password'],
                                              project_name=openstack_config['project_name'],
                                              domain_name=openstack_config['domain_name'])
+        self._zun_connection = client.Client(1,
+                                             auth_url=openstack_config['auth_url'],
+                                             username=openstack_config['username'],
+                                             password=openstack_config['password'],
+                                             project_name=openstack_config['project_name'],
+                                             user_domain_name=openstack_config['domain_name'],
+                                             project_domain_name=openstack_config['domain_name'])
 
     def monitoring_resources(self) -> dict:
         """
@@ -109,7 +116,7 @@ class OpenStackController:
     def allocate_floating_ip(self, server) -> str:
         return self._connection.add_auto_ip(server, wait=True)
 
-    def delete_server(self, server_name: str, server_ip: str = "") -> None:
+    def delete_server(self, server_name: str, server_ip: str = None) -> None:
         """
         UC-0102 서버 반납 / UC-0203 인스턴스 삭제
         서버에 할당된 유동 IP, 키페어도 자동으로 삭제합니다.
@@ -121,7 +128,7 @@ class OpenStackController:
 
         server = self._connection.compute.find_server(server_name)
 
-        if server is not None:
+        if server is not None and server_ip is not None:
             floating_ips = self._connection.network.ips(server_id=server.id, device_id=server.id)
             for floating_ip in floating_ips:
                 if floating_ip.floating_ip_address == server_ip:
@@ -439,3 +446,50 @@ class OpenStackController:
 
     def find_ports(self, network_id: str):
         return self._connection.network.ports(network_id=network_id)
+
+    def create_container(self,
+                         container_name: str,
+                         image_name: str,
+                         env: str = None,
+                         cmd: str = None):
+        """
+        컨테이너를 생성합니다.
+
+        :param container_name: 생성할 컨테이너의 이름
+        :param image_name: 도커 허브에서 가져올 이미지 이름
+        :param env: 덮어 씌울 환경 변수
+        :param cmd: 덮어 씌울 명령어
+        :return: 생성된 컨테이너 인스턴스
+        """
+
+        if self.find_container(container_name) is not None:
+            return None
+
+        return self._zun_connection.containers.run(name=container_name,
+                                                   image=image_name,
+                                                   environment=env,
+                                                   command=cmd)
+
+    def find_container(self, container_name: str):
+        """
+        컨테이너 인스턴스를 반환합니다.
+
+        :param container_name: 반환할 컨테이너 이름
+        :return: 반환한 컨테이너 인스턴스
+        """
+
+        try:
+            return self._zun_connection.containers.get(container_name)
+        except:
+            return None
+
+    def delete_container(self, container_name: str):
+        """
+        컨테이너를 삭제합니다.
+
+        :param container_name: 삭제할 컨테이너 이름
+        :return: 없음
+        """
+
+        if self.find_container(container_name) is not None:
+            self._zun_connection.containers.delete(id=container_name, force=True)

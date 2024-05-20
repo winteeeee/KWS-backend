@@ -30,3 +30,14 @@ class Node(Base):
     vcpu: Mapped[int] = mapped_column(Integer)
     ram: Mapped[int] = mapped_column(Integer)
     disk: Mapped[int] = mapped_column(Integer)
+
+
+class Container(Base):
+    __tablename__ = "container"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_name: Mapped[str] = mapped_column(String(45))
+    container_name: Mapped[str] = mapped_column(String(45), unique=True)
+    start_date: Mapped[datetime] = mapped_column(Date)
+    end_date: Mapped[datetime] = mapped_column(Date)
+    image_name: Mapped[str] = mapped_column(String(45))

@@ -29,6 +29,7 @@ schedule.every().day.at("00:00").do(delete_expired_data)
 def run_scheduler():
     while True:
         schedule.run_pending()
+        # TODO 컨테이너도 삭제
         time.sleep(1)
 
 

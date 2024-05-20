@@ -5,10 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database.factories import MySQLEngineFactory
-from model.db_models import Server, Node
-from model.api_models import ApiResponse, ServersResponseDTO, ErrorResponse, NodesSpecResponseDTO, NodeSpecDTO
+from model.db_models import Server
+from model.api_models import ApiResponse, ServersResponseDTO, ErrorResponse
 from util.utils import validate_ssh_key
-from config.config import node_config
 
 
 db_router = APIRouter(prefix="/db")
@@ -58,3 +57,9 @@ def server_renew(server_name: str = Form(...),
         return ApiResponse(status.HTTP_200_OK, "대여 기간 연장 완료")
     else:
         return ErrorResponse(status.HTTP_400_BAD_REQUEST, "입력한 정보가 잘못됨")
+
+
+@db_router.put("/container_extension")
+def container_extension():
+    # TODO 구현
+    pass

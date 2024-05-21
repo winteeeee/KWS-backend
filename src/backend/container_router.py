@@ -8,10 +8,13 @@ from database.factories import MySQLEngineFactory
 from model.api_models import ContainerCreateRequestDTO, ErrorResponse, ApiResponse, ContainerReturnRequestDTO
 from model.db_models import Container
 from util.utils import create_env_dict
+from util.logger import get_logger
+
 
 container_router = APIRouter(prefix="/container")
 controller = OpenStackController()
 db_connection = MySQLEngineFactory().get_instance()
+backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/backend")
 
 
 @container_router.post("/rental")
@@ -39,7 +42,8 @@ def rental(container_info: ContainerCreateRequestDTO):
 
             session.add(container)
             session.commit()
-        except:
+        except Exception as e:
+            backend_logger.error(e)
             session.rollback()
             controller.delete_container(container_info.container_name)
             return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
@@ -65,7 +69,8 @@ def container_return(container_info: ContainerReturnRequestDTO):
             controller.delete_container(container_info.container_name)
             session.delete(container)
             session.commit()
-        except:
+        except Exception as e:
+            backend_logger.error(e)
             return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
 
     return ApiResponse(status.HTTP_200_OK, None)

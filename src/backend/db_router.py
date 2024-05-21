@@ -10,10 +10,12 @@ from model.db_models import Server, Container
 from model.api_models import (ApiResponse, ServersResponseDTO, ContainersResponseDTO,
                               ErrorResponse, ContainerExtensionRequestDTO)
 from util.utils import validate_ssh_key
+from util.logger import get_logger
 
 
 db_router = APIRouter(prefix="/db")
 db_connection = MySQLEngineFactory().get_instance()
+backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/backend")
 
 
 @db_router.get("/servers")
@@ -67,7 +69,8 @@ def server_renew(server_name: str = Form(...),
                 server.end_date = date(int(split_date[0]), int(split_date[1]), int(split_date[2]))
                 session.add(server)
                 session.commit()
-            except:
+            except Exception as e:
+                backend_logger.error(e)
                 session.rollback()
                 return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
         return ApiResponse(status.HTTP_200_OK, "대여 기간 연장 완료")
@@ -94,7 +97,8 @@ def container_extension(container_info: ContainerExtensionRequestDTO):
             container.end_date = date(int(split_date[0]), int(split_date[1]), int(split_date[2]))
             session.add(container)
             session.commit()
-        except:
+        except Exception as e:
+            backend_logger.error(e)
             return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
 
     return ApiResponse(status.HTTP_200_OK, None)

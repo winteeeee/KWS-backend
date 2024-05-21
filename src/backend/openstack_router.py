@@ -10,11 +10,13 @@ from model.api_models import (ApiResponse, ServerCreateRequestDTO, ServerRentalR
                               NetworkResponseDTO, NodeSpecDTO, NodesSpecResponseDTO, ResourceResponseDTO)
 from openStack.openstack_controller import OpenStackController
 from util.utils import validate_ssh_key, gateway_extractor, generator_len
+from util.logger import get_logger
 from config.config import openstack_config, node_config
 
 openstack_router = APIRouter(prefix="/openstack")
 controller = OpenStackController()
 db_connection = MySQLEngineFactory().get_instance()
+backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/backend")
 
 
 @openstack_router.post("/rental")
@@ -31,8 +33,9 @@ def server_rent(server_info: ServerCreateRequestDTO):
                                          vcpus=server_info.vcpus,
                                          ram=server_info.ram,
                                          disk=server_info.disk)
-        except:
-            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "플레이버 생성 오류")
+        except Exception as e:
+            backend_logger.error(e)
+            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "커스텀 플레이버 생성 오류")
 
         # 네트워크 분리 적용
         if controller.find_network(server_info.network_name) is None:
@@ -41,36 +44,24 @@ def server_rent(server_info: ServerCreateRequestDTO):
 
             try:
                 controller.create_network(network_name=server_info.network_name, external=False)
-            except:
-                return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "네트워크 생성 오류")
-
-            try:
                 controller.create_subnet(subnet_name=subnet_name,
                                          ip_version=4,
                                          subnet_address=server_info.subnet_cidr,
                                          subnet_gateway=gateway_extractor(server_info.subnet_cidr),
                                          network_name=server_info.network_name)
-            except:
-                controller.delete_network(network_name=server_info.network_name)
-                return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "서브넷 생성 오류")
-
-            try:
                 controller.create_router(router_name=router_name,
                                          external_network_name=openstack_config['external_network'],
                                          external_subnet_name=openstack_config['external_network_subnet'])
-            except:
-                controller.delete_network(network_name=server_info.network_name)
-                controller.delete_subnet(subnet_name=subnet_name)
-                return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "라우터 생성 오류")
-
-            try:
                 controller.add_interface_to_router(router_name=router_name,
                                                    internal_subnet_name=subnet_name)
-            except:
-                controller.delete_network(network_name=server_info.network_name)
-                controller.delete_subnet(subnet_name=subnet_name)
+            except Exception as e:
+                backend_logger.error(e)
+                controller.remove_interface_from_router(router_name=router_name,
+                                                        internal_subnet_name=subnet_name)
                 controller.delete_router(router_name=router_name)
-                return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "인터페이스 추가 오류")
+                controller.delete_subnet(subnet_name=subnet_name)
+                controller.delete_network(network_name=server_info.network_name)
+                return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "네트워크 분리 중 오류 발생")
 
         try:
             server, private_key = controller.create_server(server_info)
@@ -89,7 +80,8 @@ def server_rent(server_info: ServerCreateRequestDTO):
             )
             session.add(server)
             session.commit()
-        except:
+        except Exception as e:
+            backend_logger.error(e)
             session.rollback()
             controller.delete_server(server_info.server_name, floating_ip)
             return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
@@ -102,7 +94,8 @@ def server_rent(server_info: ServerCreateRequestDTO):
 def image_list_show():
     try:
         images = controller.find_images()
-    except:
+    except Exception as e:
+        backend_logger.error(e)
         return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
 
     image_list = [ImageListResponseDTO(image.name).__dict__ for image in images]
@@ -113,7 +106,8 @@ def image_list_show():
 def flavor_list_show():
     try:
         flavors = controller.find_flavors()
-    except:
+    except Exception as e:
+        backend_logger.error(e)
         return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
 
     flavor_list = []
@@ -166,7 +160,8 @@ async def server_return(server_name: str = Form(...),
                         controller.delete_router(router_name=router_name)
                         controller.delete_network(network_name=network_name)
                 session.commit()
-            except:
+            except Exception as e:
+                backend_logger.error(e)
                 return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
 
         return ApiResponse(status.HTTP_200_OK, "서버 삭제 완료")

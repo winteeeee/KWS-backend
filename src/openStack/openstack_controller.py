@@ -4,6 +4,7 @@ from zunclient import client
 from model.api_models import ServerCreateRequestDTO
 from config.config import openstack_config
 from util.utils import cloud_init_creator
+from util.logger import get_logger
 
 
 class OpenStackController:
@@ -20,6 +21,7 @@ class OpenStackController:
                                              project_name=openstack_config['project_name'],
                                              user_domain_name=openstack_config['domain_name'],
                                              project_domain_name=openstack_config['domain_name'])
+        self._logger = get_logger(name='openstack_controller', log_level='INFO', save_path="./log/openStack")
 
     def __new__(cls):
         if not hasattr(cls, 'instance'):
@@ -40,6 +42,8 @@ class OpenStackController:
 
         :return: 자원 딕셔너리
         """
+        self._logger.info('monitoring_resources 실행')
+
         count = 0
         vcpus = 0
         ram = 0
@@ -71,6 +75,7 @@ class OpenStackController:
 
         :return: openstack.connection.Connection
         """
+        self._logger.info('get_connection 실행')
         return self._connection
 
     def find_server(self, server_name: str) -> openstack.compute.v2.server.Server:
@@ -80,7 +85,7 @@ class OpenStackController:
         :param server_name: 조회할 서버명
         :return: openstack.compute.v2.server.Server
         """
-
+        self._logger.info('find_server 실행')
         return self._connection.compute.find_server(server_name)
 
     def create_server(self, server_info: ServerCreateRequestDTO) -> openstack.compute.v2.server.Server:
@@ -93,6 +98,7 @@ class OpenStackController:
         :param server_info: 생성할 서버 정보
         :return: 서버 객체
         """
+        self._logger.info('create_server 실행')
 
         kwargs = {
             "name": server_info.server_name,
@@ -102,10 +108,12 @@ class OpenStackController:
         }
 
         if server_info.password == "":
+            self._logger.info("인스턴스에 키페어 할당")
             keypair = self.find_key_pair(f"{server_info.server_name}_keypair")
             private_key = keypair.private_key
             kwargs["key_name"] = keypair.name
         else:
+            self._logger.info("인스턴스에 비밀번호 할당")
             private_key = ""
 
         cloud_init = cloud_init_creator(server_name=server_info.server_name,
@@ -119,6 +127,7 @@ class OpenStackController:
         return server, private_key
 
     def allocate_floating_ip(self, server) -> str:
+        self._logger.info('allocate_floating_ip 실행')
         return self._connection.add_auto_ip(server, wait=True)
 
     def delete_server(self, server_name: str, server_ip: str = None) -> None:
@@ -131,9 +140,11 @@ class OpenStackController:
         :return: 없음
         """
 
+        self._logger.info('delete_server 실행')
         server = self._connection.compute.find_server(server_name)
 
         if server is not None and server_ip is not None:
+            self._logger.info('유동 IP 삭제 중')
             floating_ips = self._connection.network.ips(server_id=server.id, device_id=server.id)
             for floating_ip in floating_ips:
                 if floating_ip.floating_ip_address == server_ip:
@@ -141,6 +152,7 @@ class OpenStackController:
 
             key_pair = self._connection.compute.find_keypair(f"{server_name}_keypair")
             if key_pair is not None:
+                self._logger.info('키페어 삭제 중')
                 self._connection.compute.delete_keypair(key_pair)
 
             self._connection.compute.delete_server(server)
@@ -152,9 +164,16 @@ class OpenStackController:
         :param image_name: 이미지 이름
         :return: Image 객체
         """
+        self._logger.info('find_image 실행')
         return self._connection.compute.find_image(image_name)
 
     def find_images(self):
+        """
+        시스템에 존재하는 모든 이미지 조회
+
+        :return: 이미지 제너레이터
+        """
+        self._logger.info('find_images 실행')
         return self._connection.compute.images()
 
     def delete_image(self, image_name: str) -> None:
@@ -164,6 +183,7 @@ class OpenStackController:
         :param image_name: 삭제할 이미지 이름
         :return: 없음
         """
+        self._logger.info('delete_image 실행')
 
         image = self.find_image(image_name)
         if image is not None:
@@ -176,9 +196,16 @@ class OpenStackController:
         :param network_name: 조회할 네트워크 이름
         :return: openstack.network.v2.network.Network
         """
+        self._logger.info('find_network 실행')
         return self._connection.network.find_network(network_name)
 
     def find_networks(self) -> list[openstack.network.v2.network.Network]:
+        """
+        시스템에 존재하는 모든 네트워크 조회
+
+        :return: 네트워크 제너레이터
+        """
+        self._logger.info('find_networks 실행')
         return self._connection.network.networks()
 
     def create_network(self,
@@ -191,6 +218,7 @@ class OpenStackController:
         :param external: 외부 네트워크 여부
         :return: openstack.network.v2.network.Network
         """
+        self._logger.info('create_network 실행')
         return self._connection.network.create_network(name=network_name, is_router_external=external)
 
     def update_network(self,
@@ -205,7 +233,7 @@ class OpenStackController:
         :param external: 외부 네트워크 여부
         :return: openstack.network.v2.network.Network
         """
-
+        self._logger.info('update_network 실행')
         target_network = self.find_network(network_name)
         return self._connection.network.update_network(network=target_network,
                                                        name=new_name if new_name is not None else network_name,
@@ -219,7 +247,7 @@ class OpenStackController:
         :param network_name: 삭제할 네트워크 이름
         :return: 없음
         """
-
+        self._logger.info('delete_network 실행')
         network = self.find_network(network_name)
         if network is not None:
             self._connection.network.delete_network(network)
@@ -231,7 +259,7 @@ class OpenStackController:
         :param subnet_name: 조회할 서브넷 이름(ID도 가능)
         :return: openstack.network.v2.subnet.Subnet
         """
-
+        self._logger.info('find_subnet 실행')
         return self._connection.network.find_subnet(subnet_name)
 
     def create_subnet(self,
@@ -250,13 +278,13 @@ class OpenStackController:
         :param network_name: 연결할 네트워크 이름
         :return: openstack.network.v2.subnet.Subnet
         """
-
+        self._logger.info('create_subnet 실행')
         return self._connection.network.create_subnet(name=subnet_name,
                                                       ip_version=ip_version,
                                                       cidr=subnet_address,
                                                       gateway_ip=subnet_gateway,
                                                       network_id=self.find_network(network_name).id,
-                                                      dns_nameservers= ['8.8.8.8'])
+                                                      dns_nameservers=['8.8.8.8'])
 
     def update_subnet(self,
                       subnet_name: str,
@@ -274,7 +302,7 @@ class OpenStackController:
         :param subnet_gateway: 변경할 서브넷 게이트웨이
         :return: openstack.network.v2.subnet.Subnet
         """
-
+        self._logger.info('update_subnet 실행')
         target_subnet = self.find_subnet(subnet_name)
         return self._connection.network.update_subnet(subnet=target_subnet,
                                                       name=new_name if new_name is not None else subnet_name,
@@ -290,7 +318,7 @@ class OpenStackController:
         :param subnet_name: 삭제할 서브넷의 이름
         :return: 없음
         """
-
+        self._logger.info('delete_subnet 실행')
         subnet = self.find_subnet(subnet_name)
         if subnet is not None:
             self._connection.network.delete_subnet(subnet)
@@ -302,7 +330,7 @@ class OpenStackController:
         :param router_name: 조회할 라우터 이름
         :return: openstack.network.v2.router.Router
         """
-
+        self._logger.info('find_router 실행')
         return self._connection.network.find_router(router_name)
 
     def create_router(self,
@@ -322,8 +350,9 @@ class OpenStackController:
         :param external_subnet_name: 라우터의 게이트웨이로 선택할 외부 네트워크의 서브넷
         :return: openstack.network.v2.router.Router
         """
-
+        self._logger.info('create_router 실행')
         if external_subnet_name and external_subnet_name is not None:
+            self._logger.info('외부 게이트웨이 연결')
             external_network = self.find_network(external_network_name)
             external_gateway = {
                 "network_id": external_network.id,
@@ -348,12 +377,20 @@ class OpenStackController:
         :param internal_subnet_name: 라우터와 연결할 내부 네트워크의 서브넷 이름
         :return:
         """
-
+        self._logger.info('add_interface_to_router 실행')
         return self._connection.network.add_interface_to_router(router=self.find_router(router_name),
                                                                 subnet_id=self.find_subnet(internal_subnet_name).id)
 
     def remove_interface_from_router(self, router_name: str, internal_subnet_name: str) \
             -> None:
+        """
+        라우터에서 인터페이스 제거
+
+        :param router_name: 라우터 이름
+        :param internal_subnet_name: 제거할 인터페이스의 서브넷 이름
+        :return: 없음
+        """
+        self._logger.info('remove_interface_from_router 실행')
         return self._connection.network.remove_interface_from_router(router=self.find_router(router_name),
                                                                      subnet_id=self.find_subnet(internal_subnet_name).id)
 
@@ -365,7 +402,7 @@ class OpenStackController:
         :param new_name: 변경할 라우터의 새 이름
         :return: openstack.network.v2.router.Router
         """
-
+        self._logger.info('update_router 실행')
         return self._connection.network.update_router(router=self.find_router(router_name),
                                                       name=new_name)
 
@@ -376,7 +413,7 @@ class OpenStackController:
         :param router_name: 삭제할 라우터 이름
         :return: 없음
         """
-
+        self._logger.info('delete_router 실행')
         router = self.find_router(router_name)
         if router is not None:
             self._connection.network.delete_router(router)
@@ -388,9 +425,16 @@ class OpenStackController:
         :param flavor_name: 조회할 플레이버 이름
         :return: openstack.compute.v2.flavor.Flavor
         """
+        self._logger.info('find_flavor 실행')
         return self._connection.compute.find_flavor(flavor_name)
 
     def find_flavors(self) -> list[openstack.compute.v2.flavor.Flavor]:
+        """
+        시스템에 존재하는 모든 플레이버 조회
+
+        :return: 플레이버 제너레이터
+        """
+        self._logger.info('find_flavors 실행')
         return self._connection.compute.flavors()
 
     def create_flavor(self,
@@ -407,7 +451,7 @@ class OpenStackController:
         :param disk: 플레이버의 디스크 용량(GB)
         :return: openstack.compute.v2.flavor.Flavor
         """
-
+        self._logger.info('create_flavor 실행')
         return self._connection.compute.create_flavor(name=flavor_name, vcpus=vcpus, ram=ram, disk=disk)
 
     def delete_flavor(self, flavor_name: str) -> None:
@@ -417,7 +461,7 @@ class OpenStackController:
         :param flavor_name: 삭제할 플레이버 이름
         :return: 없음
         """
-
+        self._logger.info('delete_flavor 실행')
         flavor = self.find_flavor(flavor_name)
         if flavor is not None:
             self._connection.compute.delete_flavor(flavor)
@@ -429,7 +473,7 @@ class OpenStackController:
         :param keypair_name:
         :return: openstack.compute.v2.keypair.Keypair
         """
-
+        self._logger.info('create_key_pair 실행')
         keypair = self._connection.compute.create_keypair(name=keypair_name)
         return keypair
 
@@ -441,7 +485,7 @@ class OpenStackController:
         :param keypair_name: 조회할 키 페어 이름
         :return: openstack.compute.v2.keypair.Keypair
         """
-
+        self._logger.info('find_key_pair 실행')
         keypair = self._connection.compute.find_keypair(keypair_name)
 
         if not keypair:
@@ -450,6 +494,13 @@ class OpenStackController:
         return keypair
 
     def find_ports(self, network_id: str):
+        """
+        네트워크에 존재하는 모든 포트 조회
+
+        :param network_id: 네트워크 아이디
+        :return: 플레이버 제너레이터
+        """
+        self._logger.info('find_ports 실행')
         return self._connection.network.ports(network_id=network_id)
 
     def create_container(self,
@@ -462,11 +513,11 @@ class OpenStackController:
 
         :param container_name: 생성할 컨테이너의 이름
         :param image_name: 도커 허브에서 가져올 이미지 이름
-        :param env: 덮어 씌울 환경 변수
+        :param env: 덮어 씌울 환경변수
         :param cmd: 덮어 씌울 명령어
         :return: 생성된 컨테이너 인스턴스
         """
-
+        self._logger.info('create_container 실행')
         if self.find_container(container_name) is not None:
             return None
 
@@ -482,7 +533,7 @@ class OpenStackController:
         :param container_name: 반환할 컨테이너 이름
         :return: 반환한 컨테이너 인스턴스
         """
-
+        self._logger.info('find_container 실행')
         try:
             return self._zun_connection.containers.get(container_name)
         except:
@@ -495,6 +546,6 @@ class OpenStackController:
         :param container_name: 삭제할 컨테이너 이름
         :return: 없음
         """
-
+        self._logger.info('delete_container 실행')
         if self.find_container(container_name) is not None:
             self._zun_connection.containers.delete(id=container_name, force=True)

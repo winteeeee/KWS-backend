@@ -455,8 +455,8 @@ class OpenStackController:
     def create_container(self,
                          container_name: str,
                          image_name: str,
-                         env: str = None,
-                         cmd: str = None):
+                         env: dict = None,
+                         cmd: list = None):
         """
         컨테이너를 생성합니다.
 

@@ -50,3 +50,16 @@ def generator_len(generator: object):
         count += 1
 
     return count
+
+
+def create_env_dict(env: str) -> dict:
+    if env is not None:
+        result = {}
+        dicts = env.split(',')
+        for element in dicts:
+            key, value = element.split('=')
+            result[key] = value
+    else:
+        result = None
+
+    return result

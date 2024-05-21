@@ -92,7 +92,7 @@ def server_rent(server_info: ServerCreateRequestDTO):
         except:
             session.rollback()
             controller.delete_server(server_info.server_name, floating_ip)
-            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "예외 상황 발생")
+            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
         
     name = f'{server_info.server_name}_keypair.pem' if private_key != "" else ""
     return ApiResponse(status.HTTP_201_CREATED, ServerRentalResponseDTO(name, private_key).__dict__)
@@ -103,7 +103,7 @@ def image_list_show():
     try:
         images = controller.find_images()
     except:
-        return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "예외 상황 발생")
+        return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
 
     image_list = [ImageListResponseDTO(image.name).__dict__ for image in images]
     return ApiResponse(status.HTTP_200_OK, image_list)
@@ -114,7 +114,7 @@ def flavor_list_show():
     try:
         flavors = controller.find_flavors()
     except:
-        return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "예외 상황 발생")
+        return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
 
     flavor_list = []
     for flavor in flavors:
@@ -167,7 +167,7 @@ async def server_return(server_name: str = Form(...),
                         controller.delete_network(network_name=network_name)
                 session.commit()
             except:
-                return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "예외 상황 발생")
+                return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
 
         return ApiResponse(status.HTTP_200_OK, "서버 삭제 완료")
     else:

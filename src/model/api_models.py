@@ -30,7 +30,7 @@ class ContainerCreateRequestDTO(BaseModel):
     image_name: str
     password: str
     env: str | None
-    cmd: str | None
+    cmd: list | None
 
 
 class ContainerReturnRequestDTO(BaseModel):
@@ -99,6 +99,20 @@ class ServersResponseDTO:
         self.network_name = network_name
         self.node_name = node_name
         self.flavor_name = flavor_name
+        self.image_name = image_name
+
+
+class ContainersResponseDTO:
+    def __init__(self,
+                 user_name: str,
+                 container_name: str,
+                 start_date: datetime,
+                 end_date: datetime,
+                 image_name: str):
+        self.user_name = user_name
+        self.container_name = container_name
+        self.start_date = start_date
+        self.end_date = end_date
         self.image_name = image_name
 
 

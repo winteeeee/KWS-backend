@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from database.factories import MySQLEngineFactory
 from model.db_models import Server, Container
-from model.api_models import ApiResponse, ServersResponseDTO, ErrorResponse, ContainerExtensionRequestDTO
+from model.api_models import (ApiResponse, ServersResponseDTO, ContainersResponseDTO,
+                              ErrorResponse, ContainerExtensionRequestDTO)
 from util.utils import validate_ssh_key
 
 
@@ -25,7 +26,21 @@ def server_show():
             del server_dict['id']
             del server_dict['_sa_instance_state']
             server_list.append(ServersResponseDTO(**server_dict).__dict__)
-        return ApiResponse(status.HTTP_200_OK, server_list)
+    return ApiResponse(status.HTTP_200_OK, server_list)
+
+
+@db_router.get("/containers")
+def container_show():
+    with Session(db_connection) as session, session.begin():
+        containers = session.scalars(select(Container)).all()
+        containers_list = []
+        for container in containers:
+            container_dict = container.__dict__
+            del container_dict['id']
+            del container_dict['_sa_instance_state']
+            del container_dict['password']
+            containers_list.append(ContainersResponseDTO(**container_dict).__dict__)
+    return ApiResponse(status.HTTP_200_OK, containers_list)
 
 
 @db_router.put("/extension")
@@ -54,7 +69,7 @@ def server_renew(server_name: str = Form(...),
                 session.commit()
             except:
                 session.rollback()
-                return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "예외 상황 발생")
+                return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
         return ApiResponse(status.HTTP_200_OK, "대여 기간 연장 완료")
     else:
         return ErrorResponse(status.HTTP_400_BAD_REQUEST, "입력한 정보가 잘못됨")
@@ -80,6 +95,6 @@ def container_extension(container_info: ContainerExtensionRequestDTO):
             session.add(container)
             session.commit()
         except:
-            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "예외 상황 발생")
+            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
 
     return ApiResponse(status.HTTP_200_OK, None)

@@ -7,6 +7,7 @@ from openStack.openstack_controller import OpenStackController
 from database.factories import MySQLEngineFactory
 from model.api_models import ContainerCreateRequestDTO, ErrorResponse, ApiResponse, ContainerReturnRequestDTO
 from model.db_models import Container
+from util.utils import create_env_dict
 
 container_router = APIRouter(prefix="/container")
 controller = OpenStackController()
@@ -22,7 +23,7 @@ def rental(container_info: ContainerCreateRequestDTO):
         try:
             controller.create_container(container_name=container_info.container_name,
                                         image_name=container_info.image_name,
-                                        env=container_info.env,
+                                        env=create_env_dict(container_info.env),
                                         cmd=container_info.cmd)
 
             sha256 = hashlib.sha256()
@@ -41,7 +42,7 @@ def rental(container_info: ContainerCreateRequestDTO):
         except:
             session.rollback()
             controller.delete_container(container_info.container_name)
-            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "예외 상황 발생")
+            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
 
         return ApiResponse(status.HTTP_201_CREATED, None)
 
@@ -65,6 +66,6 @@ def container_return(container_info: ContainerReturnRequestDTO):
             session.delete(container)
             session.commit()
         except:
-            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "예외 상황 발생")
+            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
 
     return ApiResponse(status.HTTP_200_OK, None)

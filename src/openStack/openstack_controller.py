@@ -21,6 +21,11 @@ class OpenStackController:
                                              user_domain_name=openstack_config['domain_name'],
                                              project_domain_name=openstack_config['domain_name'])
 
+    def __new__(cls):
+        if not hasattr(cls, 'instance'):
+            cls.instance = super().__new__(cls)
+        return cls.instance
+
     def monitoring_resources(self) -> dict:
         """
         UC- 서버 자원 현황 조회

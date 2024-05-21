@@ -22,6 +22,28 @@ class ServerCreateRequestDTO(BaseModel):
     node_name: str
 
 
+class ContainerCreateRequestDTO(BaseModel):
+    user_name: str
+    container_name: str
+    start_date: str
+    end_date: str
+    image_name: str
+    password: str
+    env: str | None
+    cmd: str | None
+
+
+class ContainerReturnRequestDTO(BaseModel):
+    container_name: str
+    password: str
+
+
+class ContainerExtensionRequestDTO(BaseModel):
+    container_name: str
+    password: str
+    end_date: str
+
+
 class ApiResponse(Response):
     def __init__(self, code: int, data: object):
         super().__init__(

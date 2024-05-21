@@ -1,12 +1,13 @@
 import io
+import hashlib
 from datetime import date
 from fastapi import APIRouter, Form, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database.factories import MySQLEngineFactory
-from model.db_models import Server
-from model.api_models import ApiResponse, ServersResponseDTO, ErrorResponse
+from model.db_models import Server, Container
+from model.api_models import ApiResponse, ServersResponseDTO, ErrorResponse, ContainerExtensionRequestDTO
 from util.utils import validate_ssh_key
 
 
@@ -60,6 +61,25 @@ def server_renew(server_name: str = Form(...),
 
 
 @db_router.put("/container_extension")
-def container_extension():
-    # TODO 구현
-    pass
+def container_extension(container_info: ContainerExtensionRequestDTO):
+    sha256 = hashlib.sha256()
+    sha256.update(container_info.password.encode('utf-8'))
+
+    with (Session(db_connection) as session):
+        try:
+            container = session.scalars(
+                select(Container)
+                .where(Container.container_name == container_info.container_name)
+            ).one()
+
+            if sha256.hexdigest() != container.password:
+                return ErrorResponse(status.HTTP_400_BAD_REQUEST, "비밀번호가 맞지 않습니다.")
+
+            split_date = container_info.end_date.split(sep='-')
+            container.end_date = date(int(split_date[0]), int(split_date[1]), int(split_date[2]))
+            session.add(container)
+            session.commit()
+        except:
+            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "예외 상황 발생")
+
+    return ApiResponse(status.HTTP_200_OK, None)

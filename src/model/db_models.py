@@ -41,3 +41,4 @@ class Container(Base):
     start_date: Mapped[datetime] = mapped_column(Date)
     end_date: Mapped[datetime] = mapped_column(Date)
     image_name: Mapped[str] = mapped_column(String(45))
+    password: Mapped[str] = mapped_column(String(100))

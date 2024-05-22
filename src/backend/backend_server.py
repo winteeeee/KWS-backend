@@ -23,6 +23,7 @@ origins = [
     f"http://{server_config['frontend']['host']}:{server_config['frontend']['port']}"
 ]
 
+backend_logger.info("서버 실행 시작")
 app = FastAPI()
 app.include_router(openstack_router)
 app.include_router(db_router)
@@ -35,6 +36,3 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(LoggingMiddleware)
-
-
-

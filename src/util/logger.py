@@ -12,12 +12,14 @@ def get_logger(name: str = 'log',
     formatter = logging.Formatter('%(asctime)s | %(name)s | %(levelname)s: %(message)s')
 
     stream_handler = _get_stream_handler(formatter)
-    logger.addHandler(stream_handler)
+    if len(logger.handlers) == 0:
+        logger.addHandler(stream_handler)
 
     if save_path is not None:
         _init_path(save_path)
         file_handler = _get_file_handler(save_path, name, formatter)
-        logger.addHandler(file_handler)
+        if len(logger.handlers) == 0:
+            logger.addHandler(file_handler)
 
     return logger
 

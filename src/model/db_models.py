@@ -42,3 +42,7 @@ class Container(Base):
     end_date: Mapped[datetime] = mapped_column(Date)
     image_name: Mapped[str] = mapped_column(String(45))
     password: Mapped[str] = mapped_column(String(100))
+    ip: Mapped[str] = mapped_column(String(45))
+    port: Mapped[str] = mapped_column(String(45))
+    network_name: Mapped[str] = mapped_column(String(45))
+    node_name: Mapped[str] = mapped_column(String(45))

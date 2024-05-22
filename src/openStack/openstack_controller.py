@@ -1,3 +1,5 @@
+import time
+
 import openstack
 from zunclient import client
 
@@ -107,7 +109,7 @@ class OpenStackController:
             "network": self.find_network(server_info.network_name).id,
         }
 
-        if server_info.password == "":
+        if server_info.password is None:
             self._logger.info("인스턴스에 키페어 할당")
             keypair = self.find_key_pair(f"{server_info.server_name}_keypair")
             private_key = keypair.private_key
@@ -391,8 +393,11 @@ class OpenStackController:
         :return: 없음
         """
         self._logger.info('remove_interface_from_router 실행')
-        return self._connection.network.remove_interface_from_router(router=self.find_router(router_name),
-                                                                     subnet_id=self.find_subnet(internal_subnet_name).id)
+        try:
+            self._connection.network.remove_interface_from_router(router=self.find_router(router_name),
+                                                                  subnet_id=self.find_subnet(internal_subnet_name).id)
+        except:
+            pass
 
     def update_router(self, router_name: str, new_name: str) -> openstack.network.v2.router.Router:
         """
@@ -506,34 +511,50 @@ class OpenStackController:
     def create_container(self,
                          container_name: str,
                          image_name: str,
+                         network_name: str,
                          env: dict = None,
-                         cmd: list = None):
+                         cmd: list = None,
+                         timeout: int = 10):
         """
         컨테이너를 생성합니다.
 
         :param container_name: 생성할 컨테이너의 이름
         :param image_name: 도커 허브에서 가져올 이미지 이름
+        :param network_name: 컨테이너에 연결될 네트워크 이름
         :param env: 덮어 씌울 환경변수
         :param cmd: 덮어 씌울 명령어
+        :param timeout: 컨테이너 실행 대기 타임아웃
         :return: 생성된 컨테이너 인스턴스
         """
         self._logger.info('create_container 실행')
         if self.find_container(container_name) is not None:
             return None
 
-        return self._zun_connection.containers.run(name=container_name,
-                                                   image=image_name,
-                                                   environment=env,
-                                                   command=cmd)
+        container = self._zun_connection.containers.run(name=container_name,
+                                                        image=image_name,
+                                                        environment=env,
+                                                        command=cmd,
+                                                        nets=[{'network': network_name}])
 
-    def find_container(self, container_name: str):
+        timeout_count = 0
+        self._logger.info('컨테이너 준비 대기 중')
+        while container.status == 'Creating' or timeout_count <= timeout:
+            container = self.find_container(container_name=container_name, logger_on=False)
+            time.sleep(1)
+            timeout_count += 1
+
+        return container
+
+    def find_container(self, container_name: str, logger_on: bool = True):
         """
         컨테이너 인스턴스를 반환합니다.
 
         :param container_name: 반환할 컨테이너 이름
+        :param logger_on: 로거 생성 여부
         :return: 반환한 컨테이너 인스턴스
         """
-        self._logger.info('find_container 실행')
+        if logger_on:
+            self._logger.info('find_container 실행')
         try:
             return self._zun_connection.containers.get(container_name)
         except:

@@ -4,12 +4,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database.factories import MySQLEngineFactory
-from model.db_models import Server, Node
+from model.db_models import Server, Node, Container
 from model.api_models import (ApiResponse, ServerCreateRequestDTO, ServerRentalResponseDTO, ImageListResponseDTO,
                               FlavorListResponseDTO, UsingResourceDTO, UsingResourcesResponseDTO, NodeUsingResourceDTO, ErrorResponse,
                               NetworkResponseDTO, NodeSpecDTO, NodesSpecResponseDTO, ResourceResponseDTO)
 from openStack.openstack_controller import OpenStackController
-from util.utils import validate_ssh_key, gateway_extractor, generator_len
+from util.utils import validate_ssh_key, generator_len
+from util.backend_utils import network_isolation, network_delete
 from util.logger import get_logger
 from config.config import openstack_config, node_config
 
@@ -26,8 +27,11 @@ def server_rent(server_info: ServerCreateRequestDTO):
 
     with Session(db_connection) as session:
         session.begin()
+        if server_info.network_name is None:
+            server_info.network_name = openstack_config['default_internal_network']
+
         try:
-            # 커스텀 플레이버 적용
+            backend_logger.info("커스텀 플레이버 생성 중")
             if controller.find_flavor(server_info.flavor_name) is None:
                 controller.create_flavor(flavor_name=server_info.flavor_name,
                                          vcpus=server_info.vcpus,
@@ -39,29 +43,10 @@ def server_rent(server_info: ServerCreateRequestDTO):
 
         # 네트워크 분리 적용
         if controller.find_network(server_info.network_name) is None:
-            subnet_name = f'{server_info.network_name}_subnet'
-            router_name = f'{server_info.network_name}_router'
-
-            try:
-                controller.create_network(network_name=server_info.network_name, external=False)
-                controller.create_subnet(subnet_name=subnet_name,
-                                         ip_version=4,
-                                         subnet_address=server_info.subnet_cidr,
-                                         subnet_gateway=gateway_extractor(server_info.subnet_cidr),
-                                         network_name=server_info.network_name)
-                controller.create_router(router_name=router_name,
-                                         external_network_name=openstack_config['external_network'],
-                                         external_subnet_name=openstack_config['external_network_subnet'])
-                controller.add_interface_to_router(router_name=router_name,
-                                                   internal_subnet_name=subnet_name)
-            except Exception as e:
-                backend_logger.error(e)
-                controller.remove_interface_from_router(router_name=router_name,
-                                                        internal_subnet_name=subnet_name)
-                controller.delete_router(router_name=router_name)
-                controller.delete_subnet(subnet_name=subnet_name)
-                controller.delete_network(network_name=server_info.network_name)
-                return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "네트워크 분리 중 오류 발생")
+            network_isolation(controller=controller,
+                              backend_logger=backend_logger,
+                              network_name=server_info.network_name,
+                              subnet_cidr=server_info.subnet_cidr)
 
         try:
             server, private_key = controller.create_server(server_info)
@@ -74,7 +59,7 @@ def server_rent(server_info: ServerCreateRequestDTO):
                 end_date=server_info.end_date,
                 floating_ip=floating_ip,
                 network_name=server_info.network_name,
-                node_name=server_info.node_name,
+                node_name=server.compute_host,
                 flavor_name=server_info.flavor_name,
                 image_name=server_info.image_name
             )
@@ -138,7 +123,9 @@ async def server_return(server_name: str = Form(...),
                     select(Server)
                     .where(Server.server_name == server_name)
                 ).one()
+                network_name = server.network_name
                 session.delete(server)
+                session.commit()
                 controller.delete_server(server_name, host_ip)
 
                 openstack_server = controller.find_server(server_name)
@@ -146,20 +133,13 @@ async def server_return(server_name: str = Form(...),
                 if openstack_server.flavor.original_name not in openstack_config['default_flavors']:
                     controller.delete_flavor(openstack_server.flavor.original_name)
 
-                # 기본 제공 네트워크가 아니면서 이것 외에 할당된 다른 VM이 없으면 네트워크, 라우터, 서브넷 삭제
-                network_name = ''
-                for n in openstack_server.addresses.keys():
-                    network_name = n
-                if network_name != openstack_config['default_internal_network'] and network_name != openstack_config['external_network']:
-                    if generator_len(controller.find_ports(network_id=controller.find_network(network_name).id)) <= 3:
-                        subnet_name = f'{network_name}_subnet'
-                        router_name = f'{network_name}_router'
-
-                        controller.remove_interface_from_router(router_name=router_name,
-                                                                internal_subnet_name=subnet_name)
-                        controller.delete_router(router_name=router_name)
-                        controller.delete_network(network_name=network_name)
-                session.commit()
+                if (network_name != openstack_config['external_network'] and
+                    network_name != openstack_config['default_internal_network'] and
+                    session.scalars(select(Server).where(Server.network_name == network_name)).one_or_none() is None and
+                        session.scalars(select(Container).where(Container.network_name == network_name)).one_or_none() is None):
+                    network_delete(controller=controller,
+                                   backend_logger=backend_logger,
+                                   network_name=network_name)
             except Exception as e:
                 backend_logger.error(e)
                 return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")

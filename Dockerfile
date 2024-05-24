@@ -6,4 +6,4 @@ RUN pip install -r requirements.txt
 
 WORKDIR /src
 
-CMD ["python", "main.py"]
+CMD ["python3", "main.py"]

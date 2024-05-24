@@ -543,6 +543,9 @@ class OpenStackController:
             time.sleep(1)
             timeout_count += 1
 
+        if timeout_count <= timeout:
+            raise Exception('컨테이너가 Running 상태가 아닙니다.')
+
         return container
 
     def find_container(self, container_name: str, logger_on: bool = True):

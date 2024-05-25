@@ -1,14 +1,21 @@
-controller:
-  name: "kws"
-  vcpu: 0
-  ram: 0
-  disk: 0
-compute:
-  - name: "compute_node1"
+nodes:
+  - name: "node1"
     vcpu: 6
     ram: 8
     disk: 80
-  - name: "compute_node2"
+    auth_url: "http://192.168.0.51/identity"
+  - name: "node2"
     vcpu: 6
     ram: 8
     disk: 80
+    auth_url: ""
+  - name: "node3"
+    vcpu: 6
+    ram: 8
+    disk: 80
+    auth_url: ""
+  - name: "node4"
+    vcpu: 6
+    ram: 8
+    disk: 80
+    auth_url: ""

@@ -19,11 +19,8 @@ def insert_node_config():
     engine = MySQLEngineFactory()
     backend_logger.info('노드 컨픽 주입')
     with (Session(engine.get_instance()) as session, session.begin()):
-        if session.scalars(select(Node).where(Node.name == node_config['controller']['name'])).one_or_none() is None:
-            session.add(Node(**node_config['controller']))
-
-        for compute in node_config['compute']:
-            if session.scalars(select(Node).where(Node.name == compute['name'])).one_or_none() is None:
-                session.add(Node(**compute))
+        for node in node_config['nodes']:
+            if session.scalars(select(Node).where(Node.name == node['name'])).one_or_none() is None:
+                session.add(Node(**node))
 
         session.commit()

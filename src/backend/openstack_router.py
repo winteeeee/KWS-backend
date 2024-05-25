@@ -22,7 +22,8 @@ backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/b
 
 @openstack_router.post("/rental")
 def server_rent(server_info: ServerCreateRequestDTO):
-    if controller.find_server(server_info.server_name) is not None:
+    backend_logger.info("서버 이름 중복 체크")
+    if controller.find_server(server_name=server_info.server_name, node_name=server_info.node_name) is not None:
         return ErrorResponse(status.HTTP_400_BAD_REQUEST, "서버 이름 중복")
 
     with Session(db_connection) as session:
@@ -31,26 +32,40 @@ def server_rent(server_info: ServerCreateRequestDTO):
             server_info.network_name = openstack_config['default_internal_network']
 
         try:
-            backend_logger.info("커스텀 플레이버 생성 중")
-            if controller.find_flavor(server_info.flavor_name) is None:
-                controller.create_flavor(flavor_name=server_info.flavor_name,
-                                         vcpus=server_info.vcpus,
-                                         ram=server_info.ram,
-                                         disk=server_info.disk)
+            backend_logger.info("커스텀 플레이버 생성 여부 검사")
+            if controller.find_flavor(flavor_name=server_info.flavor_name,
+                                      node_name=server_info.node_name,
+                                      logger_on=False) is None:
+                backend_logger.info("커스텀 플레이버 생성 시작")
+                for node in node_config['nodes']:
+                    backend_logger.info(f"[{node['name']}] : 커스텀 플레이버 생성 시작")
+                    controller.create_flavor(flavor_name=server_info.flavor_name,
+                                             node_name=node['name'],
+                                             vcpus=server_info.vcpus,
+                                             ram=server_info.ram,
+                                             disk=server_info.disk)
         except Exception as e:
             backend_logger.error(e)
             return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "커스텀 플레이버 생성 오류")
 
         # 네트워크 분리 적용
-        if controller.find_network(server_info.network_name) is None:
-            network_isolation(controller=controller,
-                              backend_logger=backend_logger,
-                              network_name=server_info.network_name,
-                              subnet_cidr=server_info.subnet_cidr)
+        backend_logger.info("네트워크 분리 여부 검사")
+        if controller.find_network(network_name=server_info.network_name,
+                                   node_name=server_info.network_name,
+                                   logger_on=False) is None:
+            for node in node_config['nodes']:
+                network_isolation(controller=controller,
+                                  node_name=node['name'],
+                                  backend_logger=backend_logger,
+                                  network_name=server_info.network_name,
+                                  subnet_cidr=server_info.subnet_cidr)
 
         try:
-            server, private_key = controller.create_server(server_info)
-            floating_ip = controller.allocate_floating_ip(server)
+            backend_logger.info("서버 생성")
+            server, private_key = controller.create_server(server_info=server_info,
+                                                           node_name=server_info.node_name)
+            backend_logger.info("유동 IP 할당")
+            floating_ip = controller.allocate_floating_ip(server=server, node_name=server_info.node_name)
 
             server = Server(
                 user_name=server_info.user_name,
@@ -59,10 +74,11 @@ def server_rent(server_info: ServerCreateRequestDTO):
                 end_date=server_info.end_date,
                 floating_ip=floating_ip,
                 network_name=server_info.network_name,
-                node_name=server.compute_host,
+                node_name=server_info.node_name,
                 flavor_name=server_info.flavor_name,
                 image_name=server_info.image_name
             )
+            backend_logger.info("데이터베이스에 인스턴스 저장")
             session.add(server)
             session.commit()
         except Exception as e:
@@ -78,7 +94,9 @@ def server_rent(server_info: ServerCreateRequestDTO):
 @openstack_router.get("/image_list")
 def image_list_show():
     try:
-        images = controller.find_images()
+        backend_logger.info("이미지 조회")
+        # 이미지는 모든 노드가 동일하게 관리되므로 0번째 노드만 탐색
+        images = controller.find_images(node_name=node_config['nodes'][0]['name'])
     except Exception as e:
         backend_logger.error(e)
         return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
@@ -90,7 +108,9 @@ def image_list_show():
 @openstack_router.get("/flavor_list")
 def flavor_list_show():
     try:
-        flavors = controller.find_flavors()
+        backend_logger.info("플레이버 조회")
+        # 플레이버는 모든 노드가 동일하게 관리되므로 0번째 노드만 탐색
+        flavors = controller.find_flavors(node_name=node_config['nodes'][0]['name'])
     except Exception as e:
         backend_logger.error(e)
         return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
@@ -103,6 +123,21 @@ def flavor_list_show():
     return ApiResponse(status.HTTP_200_OK, [f.__dict__ for f in flavor_list])
 
 
+@openstack_router.get("/networks")
+def networks():
+    result = []
+    backend_logger.info("네트워크 조회")
+    # 네트워크는 모든 노드가 동일하게 관리되므로 0번째 노드만 탐색
+    openstack_networks = controller.find_networks(node_name=node_config['nodes'][0]['name'])
+    for network in openstack_networks:
+        if not network.is_router_external:
+            result.append(NetworkResponseDTO(name=network.name,
+                                             subnet_cidr=controller.find_subnet(subnet_name=network.subnet_ids[0],
+                                                                                node_name=node_config['nodes'][0]['name']).cidr).__dict__)
+
+    return ApiResponse(status.HTTP_200_OK, result)
+
+
 @openstack_router.delete("/return")
 async def server_return(server_name: str = Form(...),
                         host_ip: str = Form(...),
@@ -111,6 +146,7 @@ async def server_return(server_name: str = Form(...),
     key_file = io.StringIO(key_file.file.read().decode('utf-8')) \
         if key_file != "" else key_file
 
+    backend_logger.info("정보 유효성 검사 중")
     if validate_ssh_key(host_name=host_ip,
                         user_name=server_name,
                         private_key=key_file,
@@ -124,22 +160,34 @@ async def server_return(server_name: str = Form(...),
                     .where(Server.server_name == server_name)
                 ).one()
                 network_name = server.network_name
+                backend_logger.info("데이터베이스에 서버 삭제")
                 session.delete(server)
                 session.commit()
-                controller.delete_server(server_name, host_ip)
+                backend_logger.info("시스템에서 서버 삭제")
+                controller.delete_server(server_name=server_name, node_name=server.node_name, server_ip=host_ip)
 
-                openstack_server = controller.find_server(server_name)
+                openstack_server = controller.find_server(server_name=server_name, node_name=server.node_name)
                 # 기본 제공 플레이버가 아니면 삭제
                 if openstack_server.flavor.original_name not in openstack_config['default_flavors']:
-                    controller.delete_flavor(openstack_server.flavor.original_name)
+                    if session.scalars(select(Server).where(Server.flavor_name == openstack_server.flavor.original_name)).one_or_none() is None:
+                        backend_logger.info("사용 중인 커스텀 플레이버 없음")
+                        backend_logger.info("커스텀 플레이버 삭제 시작")
+                        for node in node_config['nodes']:
+                            backend_logger.info(f"[{node['name']}] : 커스텀 플레이버 삭제 시작")
+                            controller.delete_flavor(flavor_name=openstack_server.flavor.original_name,
+                                                     node_name=node['name'])
 
                 if (network_name != openstack_config['external_network'] and
                     network_name != openstack_config['default_internal_network'] and
                     session.scalars(select(Server).where(Server.network_name == network_name)).one_or_none() is None and
                         session.scalars(select(Container).where(Container.network_name == network_name)).one_or_none() is None):
-                    network_delete(controller=controller,
-                                   backend_logger=backend_logger,
-                                   network_name=network_name)
+                    backend_logger.info("사용 중인 내부 네트워크 없음")
+                    backend_logger.info("내부 네트워크 삭제 시작")
+                    for node in node_config['nodes']:
+                        network_delete(controller=controller,
+                                       node_name=node['name'],
+                                       backend_logger=backend_logger,
+                                       network_name=network_name)
             except Exception as e:
                 backend_logger.error(e)
                 return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
@@ -153,14 +201,19 @@ async def server_return(server_name: str = Form(...),
 def get_resources():
     with Session(db_connection) as session, session.begin():
         limit_total_resource = {}
-        using_total_resource = UsingResourceDTO(**controller.monitoring_resources()).__dict__
+        using_total_resource = {}
         limit_resource_by_node = []
         using_resource_by_node = []
         total_limit_vcpu = 0
         total_limit_ram = 0
         total_limit_disk = 0
+        total_using_vcpu = 0
+        total_using_ram = 0
+        total_using_disk = 0
+        total_server_count = 0
 
-        for node in node_config['compute']:
+        for node in node_config['nodes']:
+            backend_logger.info(f"[{node['name']}] : 리소스 탐색 중")
             compute_node = session.scalars(select(Node).where(Node.name == node['name'])).one()
             servers = session.scalars(select(Server).where(Server.node_name == node['name']))
 
@@ -174,11 +227,15 @@ def get_resources():
 
             for server in servers:
                 server_count += 1
-                flavor = controller.find_flavor(flavor_name=server.flavor_name)
+                flavor = controller.find_flavor(flavor_name=server.flavor_name, node_name=node['name'])
+                total_using_vcpu += flavor.vcpus
+                total_using_ram += flavor.ram
+                total_using_disk += flavor.disk
                 using_vcpus += flavor.vcpus
                 using_ram += flavor.ram
                 using_disk += flavor.disk
 
+            total_limit_vcpu += server_count
             using_resource_by_node.append(NodeUsingResourceDTO(name=node['name'],
                                                                count=server_count,
                                                                vcpus=using_vcpus,
@@ -190,22 +247,13 @@ def get_resources():
             limit_resource_by_node.append(NodeSpecDTO(**compute_node_dict).__dict__)
 
         limit_total_resource = {'vcpu': total_limit_vcpu, 'ram': total_limit_ram, 'disk': total_limit_disk}
+        using_total_resource = UsingResourceDTO(count=total_server_count,
+                                                vcpus=total_using_vcpu,
+                                                ram=total_using_ram,
+                                                disk=total_using_disk).__dict__
         limit_resources = NodesSpecResponseDTO(total_spec=limit_total_resource,
                                                nodes_spec=limit_resource_by_node).__dict__
         using_resources = UsingResourcesResponseDTO(total_resource=using_total_resource,
                                                     nodes_resource=using_resource_by_node).__dict__
     return ApiResponse(status.HTTP_200_OK, ResourceResponseDTO(limit_resources=limit_resources,
                                                                using_resources=using_resources).__dict__)
-
-
-@openstack_router.get("/networks")
-def networks():
-    result = []
-
-    openstack_networks = controller.find_networks()
-    for network in openstack_networks:
-        if not network.is_router_external:
-            result.append(NetworkResponseDTO(name=network.name,
-                                             subnet_cidr=controller.find_subnet(network.subnet_ids[0]).cidr).__dict__)
-
-    return ApiResponse(status.HTTP_200_OK, result)

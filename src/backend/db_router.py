@@ -54,6 +54,7 @@ def server_renew(server_name: str = Form(...),
     key_file = io.StringIO(key_file.file.read().decode('utf-8')) \
         if key_file != "" else key_file
 
+    backend_logger.info("정보 유효성 검사 중")
     if validate_ssh_key(host_name=host_ip,
                         user_name=server_name,
                         private_key=key_file,

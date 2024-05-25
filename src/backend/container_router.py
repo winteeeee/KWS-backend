@@ -10,7 +10,7 @@ from model.db_models import Container, Server
 from util.utils import create_env_dict
 from util.logger import get_logger
 from util.backend_utils import network_isolation, network_delete
-from config.config import openstack_config
+from config.config import openstack_config, node_config
 
 
 container_router = APIRouter(prefix="/container")
@@ -31,13 +31,20 @@ def rental(container_info: ContainerCreateRequestDTO):
             else:
                 network_name = container_info.network_name
                 # 네트워크 분리 적용
-                if controller.find_network(container_info.network_name) is None:
-                    network_isolation(controller=controller,
-                                      backend_logger=backend_logger,
-                                      network_name=container_info.network_name,
-                                      subnet_cidr=container_info.subnet_cidr)
+                backend_logger.info("네트워크 분리 여부 검사")
+                if controller.find_network(network_name=container_info.network_name,
+                                           node_name=container_info.node_name,
+                                           logger_on=False) is None:
+                    for node in node_config['nodes']:
+                        network_isolation(controller=controller,
+                                          node_name=node['name'],
+                                          backend_logger=backend_logger,
+                                          network_name=container_info.network_name,
+                                          subnet_cidr=container_info.subnet_cidr)
 
+            backend_logger.info("컨테이너 생성")
             container = controller.create_container(container_name=container_info.container_name,
+                                                    node_name=container_info.node_name,
                                                     image_name=container_info.image_name,
                                                     network_name=network_name,
                                                     env=create_env_dict(container_info.env),
@@ -57,13 +64,14 @@ def rental(container_info: ContainerCreateRequestDTO):
                 network_name=network_name,
                 node_name=container.host
             )
-
+            backend_logger.info("데이터베이스에 인스턴스 저장")
             session.add(container)
             session.commit()
         except Exception as e:
             backend_logger.error(e)
             session.rollback()
-            controller.delete_container(container_info.container_name)
+            controller.delete_container(container_name=container_info.container_name,
+                                        node_name=container_info.node_name)
             return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
 
         return ApiResponse(status.HTTP_201_CREATED, None)
@@ -81,11 +89,15 @@ def container_return(container_info: ContainerReturnRequestDTO):
                 .where(Container.container_name == container_info.container_name)
             ).one()
 
+            backend_logger.info("비밀번호 검사")
             if sha256.hexdigest() != container.password:
                 return ErrorResponse(status.HTTP_400_BAD_REQUEST, "비밀번호가 맞지 않습니다.")
 
             network_name = container.network_name
-            controller.delete_container(container_info.container_name)
+            backend_logger.info("컨테이너 삭제")
+            controller.delete_container(container_name=container_info.container_name,
+                                        node_name=container.node_name)
+            backend_logger.info("데이터베이스에 인스턴스 삭제")
             session.delete(container)
             session.commit()
 
@@ -93,9 +105,13 @@ def container_return(container_info: ContainerReturnRequestDTO):
                 network_name != openstack_config['default_internal_network'] and
                 session.scalars(select(Server).where(Server.network_name == network_name)).one_or_none() is None and
                     session.scalars(select(Container).where(Container.network_name == network_name)).one_or_none() is None):
-                network_delete(controller=controller,
-                               backend_logger=backend_logger,
-                               network_name=network_name)
+                backend_logger.info("사용 중인 내부 네트워크 없음")
+                backend_logger.info("내부 네트워크 삭제 시작")
+                for node in node_config['nodes']:
+                    network_delete(controller=controller,
+                                   node_name=node['name'],
+                                   backend_logger=backend_logger,
+                                   network_name=network_name)
 
         except Exception as e:
             backend_logger.error(e)

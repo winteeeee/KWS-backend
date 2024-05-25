@@ -23,7 +23,8 @@ backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/b
 @openstack_router.post("/rental")
 def server_rent(server_info: ServerCreateRequestDTO):
     backend_logger.info("서버 이름 중복 체크")
-    if controller.find_server(server_name=server_info.server_name, node_name=server_info.node_name) is not None:
+    if controller.find_server(server_name=server_info.server_name,
+                              node_name=server_info.node_name) is not None:
         return ErrorResponse(status.HTTP_400_BAD_REQUEST, "서버 이름 중복")
 
     with Session(db_connection) as session:
@@ -34,8 +35,7 @@ def server_rent(server_info: ServerCreateRequestDTO):
         try:
             backend_logger.info("커스텀 플레이버 생성 여부 검사")
             if controller.find_flavor(flavor_name=server_info.flavor_name,
-                                      node_name=server_info.node_name,
-                                      logger_on=False) is None:
+                                      node_name=server_info.node_name) is None:
                 backend_logger.info("커스텀 플레이버 생성 시작")
                 for node in node_config['nodes']:
                     backend_logger.info(f"[{node['name']}] : 커스텀 플레이버 생성 시작")
@@ -51,7 +51,7 @@ def server_rent(server_info: ServerCreateRequestDTO):
         # 네트워크 분리 적용
         backend_logger.info("네트워크 분리 여부 검사")
         if controller.find_network(network_name=server_info.network_name,
-                                   node_name=server_info.network_name,
+                                   node_name=server_info.node_name,
                                    logger_on=False) is None:
             for node in node_config['nodes']:
                 network_isolation(controller=controller,
@@ -84,7 +84,14 @@ def server_rent(server_info: ServerCreateRequestDTO):
         except Exception as e:
             backend_logger.error(e)
             session.rollback()
-            controller.delete_server(server_info.server_name, floating_ip)
+            controller.delete_server(server_name=server_info.server_name,
+                                     node_name=server_info.node_name,
+                                     server_ip=floating_ip)
+            if server_info.flavor_name not in openstack_config['default_flavors']:
+                for node in node_config['nodes']:
+                    backend_logger.info(f"[{node['name']}] : 커스텀 플레이버 삭제 시작")
+                    controller.delete_flavor(flavor_name=server_info.flavor_name,
+                                             node_name=node['name'])
             return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
         
     name = f'{server_info.server_name}_keypair.pem' if private_key != "" else ""
@@ -235,7 +242,7 @@ def get_resources():
                 using_ram += flavor.ram
                 using_disk += flavor.disk
 
-            total_limit_vcpu += server_count
+            total_server_count += server_count
             using_resource_by_node.append(NodeUsingResourceDTO(name=node['name'],
                                                                count=server_count,
                                                                vcpus=using_vcpus,
@@ -244,6 +251,7 @@ def get_resources():
             compute_node_dict = compute_node.__dict__
             del compute_node_dict['id']
             del compute_node_dict['_sa_instance_state']
+            del compute_node_dict['auth_url']
             limit_resource_by_node.append(NodeSpecDTO(**compute_node_dict).__dict__)
 
         limit_total_resource = {'vcpu': total_limit_vcpu, 'ram': total_limit_ram, 'disk': total_limit_disk}

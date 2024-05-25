@@ -105,9 +105,9 @@ class OpenStackController:
 
         kwargs = {
             "name": server_info.server_name,
-            "image": self.find_image(server_info.image_name, logger_on=False).id,
-            "flavor": self.find_flavor(server_info.flavor_name, logger_on=False).id,
-            "network": self.find_network(server_info.network_name, logger_on=False).id,
+            "image": self.find_image(server_info.image_name, node_name=node_name,logger_on=False).id,
+            "flavor": self.find_flavor(server_info.flavor_name, node_name=node_name, logger_on=False).id,
+            "network": self.find_network(server_info.network_name, node_name=node_name, logger_on=False).id,
         }
 
         if server_info.password is None:
@@ -126,7 +126,11 @@ class OpenStackController:
                                         user_data=server_info.cloud_init)
         kwargs["userdata"] = cloud_init
 
+        if logger_on:
+            self._logger.info(f"[{node_name}] : 서버 생성 중")
         server = self._connections[node_name].connection.create_server(**kwargs)
+        if logger_on:
+            self._logger.info(f"[{node_name}] : 서버 가동 대기 중")
         self._connections[node_name].connection.compute.wait_for_server(server)
 
         return server, private_key
@@ -424,7 +428,6 @@ class OpenStackController:
             }
 
             router = self._connections[node_name].connection.network.create_router(name=router_name,
-                                                                                   node_name=node_name,
                                                                                    external_gateway_info=external_gateway)
         else:
             router = self._connections[node_name].connection.network.create_router(name=router_name)
@@ -694,16 +697,18 @@ class OpenStackController:
         except:
             return None
 
-    def delete_container(self, container_name: str, node_name: str, logger_on: bool = True):
+    def delete_container(self, container_name: str, node_name: str, logger_on: bool = True, timeout:int = 10):
         """
         컨테이너를 삭제합니다.
 
         :param container_name: 삭제할 컨테이너 이름
         :param node_name: 접근할 노드명
         :param logger_on: 로그 온/오프
+        :param timeout: 컨테이너 삭제 대기 타임아웃
         :return: 없음
         """
         if logger_on:
             self._logger.info(f'[{node_name}] : delete_container 실행')
+
         if self.find_container(container_name=container_name, node_name=node_name, logger_on=False) is not None:
             self._connections[node_name].zun_connection.containers.delete(id=container_name, force=True)

@@ -1,4 +1,5 @@
 import hashlib
+
 from fastapi import APIRouter, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,7 +22,9 @@ backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/b
 
 @container_router.post("/rental")
 def rental(container_info: ContainerCreateRequestDTO):
-    if controller.find_container(container_info.container_name) is not None:
+    backend_logger.info("컨테이너 중복 여부 검사")
+    if controller.find_container(container_name=container_info.container_name,
+                                 node_name=container_info.node_name) is not None:
         return ErrorResponse(status.HTTP_400_BAD_REQUEST, "컨테이너 이름 중복")
 
     with Session(db_connection) as session:
@@ -60,9 +63,9 @@ def rental(container_info: ContainerCreateRequestDTO):
                 image_name=container_info.image_name,
                 password=sha256.hexdigest(),
                 ip=list(container.addresses.values())[0][0]['addr'],
-                port=str(container.ports[0]),
+                port=str(container.ports),
                 network_name=network_name,
-                node_name=container.host
+                node_name=container_info.node_name
             )
             backend_logger.info("데이터베이스에 인스턴스 저장")
             session.add(container)

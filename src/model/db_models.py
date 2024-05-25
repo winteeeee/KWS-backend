@@ -30,6 +30,7 @@ class Node(Base):
     vcpu: Mapped[int] = mapped_column(Integer)
     ram: Mapped[int] = mapped_column(Integer)
     disk: Mapped[int] = mapped_column(Integer)
+    auth_url: Mapped[str] = mapped_column(String(45), unique=True)
 
 
 class Container(Base):

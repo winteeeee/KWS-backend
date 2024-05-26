@@ -710,5 +710,14 @@ class OpenStackController:
         if logger_on:
             self._logger.info(f'[{node_name}] : delete_container 실행')
 
-        if self.find_container(container_name=container_name, node_name=node_name, logger_on=False) is not None:
+        container = self.find_container(container_name=container_name, node_name=node_name, logger_on=False)
+        if container is not None:
             self._connections[node_name].zun_connection.containers.delete(id=container_name, force=True)
+
+        timeout_count = 0
+        if logger_on:
+            self._logger.info(f'[{node_name}] : 컨테이너 삭제 대기 중')
+        while container is not None or timeout_count <= timeout:
+            container = self.find_container(container_name=container_name, node_name=node_name, logger_on=False)
+            time.sleep(1)
+            timeout_count += 1

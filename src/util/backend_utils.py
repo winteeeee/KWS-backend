@@ -10,7 +10,6 @@ def network_isolation(controller: openStack.openstack_controller.OpenStackContro
                       subnet_cidr):
     backend_logger.info(f"[{node_name}]: 네트워크 분리 중")
     subnet_name = f'{network_name}_subnet'
-    router_name = f'{network_name}_router'
 
     try:
         controller.create_network(network_name=network_name, node_name=node_name, external=False)
@@ -20,21 +19,15 @@ def network_isolation(controller: openStack.openstack_controller.OpenStackContro
                                  subnet_address=subnet_cidr,
                                  subnet_gateway=gateway_extractor(subnet_cidr),
                                  network_name=network_name)
-        controller.create_router(router_name=router_name,
-                                 node_name=node_name,
-                                 external_network_name=openstack_config['external_network'],
-                                 external_subnet_name=openstack_config['external_network_subnet'])
-        controller.add_interface_to_router(router_name=router_name,
+        controller.add_interface_to_router(router_name=openstack_config['default_router_name'],
                                            node_name=node_name,
                                            internal_subnet_name=subnet_name)
     except Exception as e:
         backend_logger.error(e)
-        controller.remove_interface_from_router(router_name=router_name,
-                                                node_name=node_name,
-                                                internal_subnet_name=subnet_name)
-        controller.delete_router(router_name=router_name, node_name=node_name)
-        controller.delete_subnet(subnet_name=subnet_name, node_name=node_name)
-        controller.delete_network(network_name=network_name, node_name=node_name)
+        network_delete(controller=controller,
+                       node_name=node_name,
+                       network_name=network_name,
+                       backend_logger=backend_logger)
 
 
 def network_delete(controller: openStack.openstack_controller.OpenStackController,
@@ -43,10 +36,8 @@ def network_delete(controller: openStack.openstack_controller.OpenStackControlle
                    network_name):
     backend_logger.info(f"[{node_name}] : 네트워크 삭제 프로세스 시작")
     subnet_name = f'{network_name}_subnet'
-    router_name = f'{network_name}_router'
 
-    controller.remove_interface_from_router(router_name=router_name,
+    controller.remove_interface_from_router(router_name=openstack_config['default_router_name'],
                                             node_name=node_name,
                                             internal_subnet_name=subnet_name)
-    controller.delete_router(router_name=router_name, node_name=node_name)
     controller.delete_network(network_name=network_name, node_name=node_name)

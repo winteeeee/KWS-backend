@@ -1,4 +1,5 @@
 import io
+from datetime import date
 from fastapi import APIRouter, Form, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -6,21 +7,35 @@ from sqlalchemy.orm import Session
 from database.factories import MySQLEngineFactory
 from model.db_models import Server, Node, Container
 from model.api_models import (ApiResponse, ServerCreateRequestDTO, ServerRentalResponseDTO, ImageListResponseDTO,
-                              FlavorListResponseDTO, UsingResourceDTO, UsingResourcesResponseDTO, NodeUsingResourceDTO, ErrorResponse,
-                              NetworkResponseDTO, NodeSpecDTO, NodesSpecResponseDTO, ResourceResponseDTO)
+                              FlavorListResponseDTO, UsingResourceDTO, UsingResourcesResponseDTO, NodeUsingResourceDTO,
+                              ErrorResponse, NetworkResponseDTO, NodeSpecDTO, NodesSpecResponseDTO, ResourceResponseDTO,
+                              ServersResponseDTO)
 from openStack.openstack_controller import OpenStackController
 from util.utils import validate_ssh_key, generator_len
 from util.backend_utils import network_isolation, network_delete
 from util.logger import get_logger
 from config.config import openstack_config, node_config
 
-openstack_router = APIRouter(prefix="/openstack")
+server_router = APIRouter(prefix="/server")
 controller = OpenStackController()
 db_connection = MySQLEngineFactory().get_instance()
 backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/backend")
 
 
-@openstack_router.post("/rental")
+@server_router.get("/list")
+def server_show():
+    with Session(db_connection) as session, session.begin():
+        servers = session.scalars(select(Server)).all()
+        server_list = []
+        for server in servers:
+            server_dict = server.__dict__
+            del server_dict['id']
+            del server_dict['_sa_instance_state']
+            server_list.append(ServersResponseDTO(**server_dict).__dict__)
+    return ApiResponse(status.HTTP_200_OK, server_list)
+
+
+@server_router.post("/rental")
 def server_rent(server_info: ServerCreateRequestDTO):
     backend_logger.info("서버 이름 중복 체크")
     if controller.find_server(server_name=server_info.server_name,
@@ -98,54 +113,41 @@ def server_rent(server_info: ServerCreateRequestDTO):
     return ApiResponse(status.HTTP_201_CREATED, ServerRentalResponseDTO(name, private_key).__dict__)
 
 
-@openstack_router.get("/image_list")
-def image_list_show():
-    try:
-        backend_logger.info("이미지 조회")
-        # 이미지는 모든 노드가 동일하게 관리되므로 0번째 노드만 탐색
-        images = controller.find_images(node_name=node_config['nodes'][0]['name'])
-    except Exception as e:
-        backend_logger.error(e)
-        return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
+@server_router.put("/extension")
+def server_renew(server_name: str = Form(...),
+                 host_ip: str = Form(...),
+                 end_date: str = Form(...),
+                 password: str = Form(""),
+                 key_file: UploadFile = Form("")):
+    key_file = io.StringIO(key_file.file.read().decode('utf-8')) \
+        if key_file != "" else key_file
 
-    image_list = [ImageListResponseDTO(image.name).__dict__ for image in images]
-    return ApiResponse(status.HTTP_200_OK, image_list)
-
-
-@openstack_router.get("/flavor_list")
-def flavor_list_show():
-    try:
-        backend_logger.info("플레이버 조회")
-        # 플레이버는 모든 노드가 동일하게 관리되므로 0번째 노드만 탐색
-        flavors = controller.find_flavors(node_name=node_config['nodes'][0]['name'])
-    except Exception as e:
-        backend_logger.error(e)
-        return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
-
-    flavor_list = []
-    for flavor in flavors:
-        if flavor.name in openstack_config['default_flavors']:
-            flavor_list.append(FlavorListResponseDTO(flavor.name, flavor.vcpus, flavor.ram, flavor.disk))
-    flavor_list = sorted(flavor_list, key=lambda f: (f.cpu, f.ram, f.disk))
-    return ApiResponse(status.HTTP_200_OK, [f.__dict__ for f in flavor_list])
-
-
-@openstack_router.get("/networks")
-def networks():
-    result = []
-    backend_logger.info("네트워크 조회")
-    # 네트워크는 모든 노드가 동일하게 관리되므로 0번째 노드만 탐색
-    openstack_networks = controller.find_networks(node_name=node_config['nodes'][0]['name'])
-    for network in openstack_networks:
-        if not network.is_router_external:
-            result.append(NetworkResponseDTO(name=network.name,
-                                             subnet_cidr=controller.find_subnet(subnet_name=network.subnet_ids[0],
-                                                                                node_name=node_config['nodes'][0]['name']).cidr).__dict__)
-
-    return ApiResponse(status.HTTP_200_OK, result)
+    backend_logger.info("정보 유효성 검사 중")
+    if validate_ssh_key(host_name=host_ip,
+                        user_name=server_name,
+                        private_key=key_file,
+                        password=password):
+        with Session(db_connection) as session:
+            session.begin()
+            try:
+                server = session.scalars(
+                    select(Server)
+                    .where(Server.server_name == server_name)
+                ).one()
+                split_date = end_date.split(sep='-')
+                server.end_date = date(int(split_date[0]), int(split_date[1]), int(split_date[2]))
+                session.add(server)
+                session.commit()
+            except Exception as e:
+                backend_logger.error(e)
+                session.rollback()
+                return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
+        return ApiResponse(status.HTTP_200_OK, "대여 기간 연장 완료")
+    else:
+        return ErrorResponse(status.HTTP_400_BAD_REQUEST, "입력한 정보가 잘못됨")
 
 
-@openstack_router.delete("/return")
+@server_router.delete("/return")
 async def server_return(server_name: str = Form(...),
                         host_ip: str = Form(...),
                         password: str = Form(""),
@@ -204,7 +206,7 @@ async def server_return(server_name: str = Form(...),
         return ErrorResponse(status.HTTP_400_BAD_REQUEST, "입력한 정보가 잘못됨")
 
 
-@openstack_router.get("/resources")
+@server_router.get("/resources")
 def get_resources():
     with Session(db_connection) as session, session.begin():
         limit_total_resource = {}

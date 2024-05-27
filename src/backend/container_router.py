@@ -24,6 +24,7 @@ backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/b
 
 @container_router.get("/list")
 def container_show():
+    backend_logger.info("컨테이너 목록 요청 수신")
     with Session(db_connection) as session, session.begin():
         containers = session.scalars(select(Container)).all()
         containers_list = []
@@ -50,26 +51,39 @@ def rental(container_info: ContainerCreateRequestDTO):
 
         backend_logger.info("네트워크 분리 여부 검사")
         # 해당 네트워크가 없다면
-        if session.scalars(select(Network).where(Network.name == container_info.network_name)).one_or_none() is None:
-            backend_logger.info("시스템에 해당 네트워크 존재하지 않음")
-            backend_logger.info("데이터베이스에 네트워크 삽입")
-            session.add(Network(
-                name=container_info.network_name,
-                cidr=container_info.subnet_cidr,
-                is_default=False
-            ))
+        try:
+            if len(session.scalars(select(Network).where(Network.name == container_info.network_name)).all()) == 0:
+                backend_logger.info("시스템에 해당 네트워크 존재하지 않음")
+                backend_logger.info("데이터베이스에 네트워크 삽입")
+                session.add(Network(
+                    name=container_info.network_name,
+                    cidr=container_info.subnet_cidr,
+                    is_default=False
+                ))
 
-        # 해당 노드의 네트워크가 없다면
-        if session.scalars(select(NodeNetwork).where(NodeNetwork.network_name == container_info.network_name and
-                                                     NodeNetwork.node_name == container_info.node_name)).one_or_none() is None:
-            network_isolation(controller=controller,
-                              node_name=container_info.node_name,
-                              backend_logger=backend_logger,
-                              network_name=container_info.network_name,
-                              subnet_cidr=container_info.subnet_cidr)
+            # 해당 노드의 네트워크가 없다면
+            if session.scalars(select(NodeNetwork).where(NodeNetwork.network_name == container_info.network_name,
+                                                         NodeNetwork.node_name == container_info.node_name)).one_or_none() is None:
+                network_isolation(controller=controller,
+                                  node_name=container_info.node_name,
+                                  backend_logger=backend_logger,
+                                  network_name=container_info.network_name,
+                                  subnet_cidr=container_info.subnet_cidr)
 
-            session.add(NodeNetwork(node_name=container_info.node_name,
-                                    network_name=container_info.network_name))
+                session.add(NodeNetwork(node_name=container_info.node_name,
+                                        network_name=container_info.network_name))
+        except Exception as e:
+            backend_logger.error(e)
+            # 네트워크 분리 복구
+            node_network = session.scalars(select(NodeNetwork).where(NodeNetwork.network_name == container_info.network_name,
+                                                         NodeNetwork.node_name == container_info.node_name)).one_or_none()
+            if node_network is not None and not node_network.network.is_default:
+                network_delete(controller=controller,
+                               node_name=container_info.node_name,
+                               network_name=container_info.network_name,
+                               backend_logger=backend_logger)
+            session.rollback()
+            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "네트워크 분리 오류")
 
         try:
             backend_logger.info("컨테이너 생성")
@@ -99,14 +113,6 @@ def rental(container_info: ContainerCreateRequestDTO):
             session.commit()
         except Exception as e:
             backend_logger.error(e)
-            # 네트워크 분리 복구
-            node_network = session.scalars(select(NodeNetwork).where(NodeNetwork.network_name == container_info.network_name and
-                                                         NodeNetwork.node_name == container_info.node_name)).one_or_none()
-            if node_network is not None and not node_network.network.is_default:
-                network_delete(controller=controller,
-                               node_name=container_info.node_name,
-                               network_name=container_info.network_name,
-                               backend_logger=backend_logger)
             session.rollback()
             controller.delete_container(container_name=container_info.container_name,
                                         node_name=container_info.node_name)
@@ -117,6 +123,7 @@ def rental(container_info: ContainerCreateRequestDTO):
 
 @container_router.put("/extension")
 def container_extension(container_info: ContainerExtensionRequestDTO):
+    backend_logger.info("컨테이너 연장 요청 수신")
     sha256 = hashlib.sha256()
     sha256.update(container_info.password.encode('utf-8'))
 
@@ -127,6 +134,7 @@ def container_extension(container_info: ContainerExtensionRequestDTO):
                 .where(Container.container_name == container_info.container_name)
             ).one()
 
+            backend_logger.info("비밀번호 검사")
             if sha256.hexdigest() != container.password:
                 return ErrorResponse(status.HTTP_400_BAD_REQUEST, "비밀번호가 맞지 않습니다.")
 

@@ -7,6 +7,7 @@ from backend.container_router import container_router
 from backend.network_router import network_router
 from backend.image_router import image_router
 from backend.flavor_router import flavor_router
+from backend.node_router import node_router
 from config.config import server_config
 from util.logger import get_logger
 
@@ -32,6 +33,7 @@ app.include_router(container_router)
 app.include_router(network_router)
 app.include_router(image_router)
 app.include_router(flavor_router)
+app.include_router(node_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,

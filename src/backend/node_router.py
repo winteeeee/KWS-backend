@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from database.factories import MySQLEngineFactory
 from model.api_response_models import (ApiResponse, UsingResourceDTO, UsingResourcesResponseDTO, NodeUsingResourceDTO,
                                        NodeSpecDTO, NodesSpecResponseDTO, ResourceResponseDTO, NodeResponseDTO)
-from model.db_models import Node, Server
+from model.db_models import Node, Server, Flavor
 from openStack.openstack_controller import OpenStackController
 from util.logger import get_logger
 from config.config import node_config
@@ -33,7 +33,7 @@ def node_list_show():
 
 @node_router.get("/resources")
 def get_resources():
-    with Session(db_connection) as session, session.begin():
+    with (Session(db_connection) as session, session.begin()):
         limit_total_resource = {}
         using_total_resource = {}
         limit_resource_by_node = []
@@ -61,11 +61,11 @@ def get_resources():
 
             for server in servers:
                 server_count += 1
-                flavor = controller.find_flavor(flavor_name=server.flavor_name, node_name=node['name'])
-                total_using_vcpu += flavor.vcpus
+                flavor = session.scalars(select(Flavor).where(Flavor.name == server.flavor_name)).one()
+                total_using_vcpu += flavor.vcpu
                 total_using_ram += flavor.ram
                 total_using_disk += flavor.disk
-                using_vcpus += flavor.vcpus
+                using_vcpus += flavor.vcpu
                 using_ram += flavor.ram
                 using_disk += flavor.disk
 
@@ -84,7 +84,7 @@ def get_resources():
         limit_total_resource = {'vcpu': total_limit_vcpu, 'ram': total_limit_ram, 'disk': total_limit_disk}
         using_total_resource = UsingResourceDTO(count=total_server_count,
                                                 vcpus=total_using_vcpu,
-                                                ram=total_using_ram,
+                                                ram=float(total_using_ram / 1024),
                                                 disk=total_using_disk).__dict__
         limit_resources = NodesSpecResponseDTO(total_spec=limit_total_resource,
                                                nodes_spec=limit_resource_by_node).__dict__

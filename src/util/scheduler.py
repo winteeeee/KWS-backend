@@ -24,12 +24,14 @@ def delete_expired_data():
         backend_logger.info("기간 지난 서버 삭제 시작")
         for server in expired_servers:
             session.delete(server)
-            controller.delete_server(server.server_name)
+            controller.delete_server(server_name=server.server_name,
+                                     node_name=server.node_name)
 
         backend_logger.info("기간 지난 컨테이너 삭제 시작")
         for container in expired_containers:
             session.delete(container)
-            controller.delete_container(container.container_name)
+            controller.delete_container(container_name=container.container_name,
+                                        node_name=container.node_name)
 
         session.commit()
 

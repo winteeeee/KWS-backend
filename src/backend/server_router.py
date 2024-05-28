@@ -112,6 +112,8 @@ def server_rent(server_info: ServerCreateRequestDTO):
                                         network_name=server_info.network_name))
         except Exception as e:
             backend_logger.error(e)
+            controller.delete_flavor(flavor_name=server_info.flavor_name,
+                                     node_name=node_name)
             # 네트워크 분리 복구
             node_network = session.scalars(select(NodeNetwork).where(NodeNetwork.network_name == server_info.network_name,
                                                          NodeNetwork.node_name == node_name)).one_or_none()
@@ -127,6 +129,7 @@ def server_rent(server_info: ServerCreateRequestDTO):
 
         try:
             backend_logger.info("서버 생성")
+            floating_ip = None
             server, private_key = controller.create_server(server_name=server_info.server_name,
                                                            image_name=server_info.image_name,
                                                            flavor_name=server_info.flavor_name,
@@ -153,10 +156,19 @@ def server_rent(server_info: ServerCreateRequestDTO):
             session.commit()
         except Exception as e:
             backend_logger.error(e)
-            session.rollback()
             controller.delete_server(server_name=server_info.server_name,
                                      node_name=node_name,
                                      server_ip=floating_ip)
+            node_network = session.scalars(select(NodeNetwork).where(NodeNetwork.network_name == server_info.network_name,
+                                                         NodeNetwork.node_name == node_name)).one_or_none()
+            if node_network is not None and not node_network.network.is_default:
+                network_delete(controller=controller,
+                               node_name=node_name,
+                               network_name=server_info.network_name,
+                               backend_logger=backend_logger)
+            controller.delete_flavor(flavor_name=server_info.flavor_name,
+                                     node_name=node_name)
+            session.rollback()
             return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
         
     name = f'{server_info.server_name}_keypair.pem' if private_key != "" else ""
@@ -222,6 +234,8 @@ async def server_return(server_name: str = Form(...),
                 ).one()
                 network_name = server.network_name
                 flavor_name = server.flavor_name
+                node_name = server.node_name
+
                 backend_logger.info("서버 삭제")
                 controller.delete_server(server_name=server_name, node_name=server.node_name, server_ip=host_ip)
                 backend_logger.info("데이터베이스에 서버 삭제")
@@ -233,6 +247,7 @@ async def server_return(server_name: str = Form(...),
                 if len(flavor.servers) == 0 and not flavor.is_default:
                     backend_logger.info("커스텀 플레이버를 사용 중인 서버 없음")
                     backend_logger.info("커스텀 플레이버 삭제")
+                    controller.delete_flavor(flavor_name=flavor_name, node_name=node_name)
 
                     backend_logger.info("데이터베이스에 플레이버 삭제")
                     target_node_flavors = session.scalars(select(NodeFlavor)

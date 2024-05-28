@@ -122,9 +122,17 @@ def rental(container_info: ContainerCreateRequestDTO):
             session.commit()
         except Exception as e:
             backend_logger.error(e)
+            # controller.delete_container(container_name=container_info.container_name,
+            #                             node_name=node_name)
+            # 네트워크 분리 복구
+            node_network = session.scalars(select(NodeNetwork).where(NodeNetwork.network_name == container_info.network_name,
+                                                         NodeNetwork.node_name == node_name)).one_or_none()
+            if node_network is not None and not node_network.network.is_default:
+                network_delete(controller=controller,
+                               node_name=node_name,
+                               network_name=container_info.network_name,
+                               backend_logger=backend_logger)
             session.rollback()
-            controller.delete_container(container_name=container_info.container_name,
-                                        node_name=node_name)
             return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
 
         return ApiResponse(status.HTTP_201_CREATED, None)

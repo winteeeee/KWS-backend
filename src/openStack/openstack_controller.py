@@ -123,6 +123,7 @@ class OpenStackController:
             "image": self.find_image(image_name, node_name=node_name,logger_on=False).id,
             "flavor": self.find_flavor(flavor_name, node_name=node_name, logger_on=False).id,
             "network": self.find_network(network_name, node_name=node_name, logger_on=False).id,
+            "terminate_volume": True
         }
 
         if password is None:
@@ -155,13 +156,19 @@ class OpenStackController:
             self._logger.info(f'[{node_name}] : allocate_floating_ip 실행')
         return self._connections[node_name].connection.add_auto_ip(server, wait=True)
 
-    def delete_server(self, server_name: str, node_name: str, server_ip: str = None, logger_on: bool = True) -> None:
+    def delete_server(self,
+                      server_name: str,
+                      node_name: str,
+                      timeout: int = 10,
+                      server_ip: str = None,
+                      logger_on: bool = True) -> None:
         """
         UC-0102 서버 반납 / UC-0203 인스턴스 삭제
         서버에 할당된 유동 IP, 키페어도 자동으로 삭제합니다.
 
         :param server_name: 삭제할 서버 이름
         :param server_ip: 삭제할 서버의 유동 아이피
+        :param timeout: 서버 삭제 대기 타임아웃
         :param node_name: 접근할 노드명
         :param logger_on: 로그 온/오프
         :return: 없음
@@ -171,13 +178,14 @@ class OpenStackController:
             self._logger.info(f'[{node_name}] : delete_server 실행')
         server = self._connections[node_name].connection.compute.find_server(server_name)
 
-        if server is not None and server_ip is not None:
-            if logger_on:
-                self._logger.info(f'[{node_name}] : 유동 IP 삭제 중')
-            floating_ips = self._connections[node_name].connection.network.ips(server_id=server.id, device_id=server.id)
-            for floating_ip in floating_ips:
-                if floating_ip.floating_ip_address == server_ip:
-                    self._connections[node_name].connection.network.delete_ip(floating_ip.id)
+        if server is not None:
+            if server_ip is not None:
+                if logger_on:
+                    self._logger.info(f'[{node_name}] : 유동 IP 삭제 중')
+                floating_ips = self._connections[node_name].connection.network.ips(server_id=server.id, device_id=server.id)
+                for floating_ip in floating_ips:
+                    if floating_ip.floating_ip_address == server_ip:
+                        self._connections[node_name].connection.network.delete_ip(floating_ip.id)
 
             key_pair = self._connections[node_name].connection.compute.find_keypair(f"{server_name}_keypair")
             if key_pair is not None:
@@ -186,6 +194,13 @@ class OpenStackController:
                 self._connections[node_name].connection.compute.delete_keypair(key_pair)
 
             self._connections[node_name].connection.compute.delete_server(server)
+            timeout_count = 0
+            if logger_on:
+                self._logger.info(f'[{node_name}] : 서버 삭제 대기 중')
+            while server is not None or timeout_count <= timeout:
+                server = self.find_server(server_name=server_name, node_name=node_name, logger_on=False)
+                time.sleep(1)
+                timeout_count += 1
 
     def find_image(self, image_name: str, node_name: str, logger_on: bool = True) -> openstack.compute.v2.image.Image:
         """
@@ -578,10 +593,14 @@ class OpenStackController:
         """
         if logger_on:
             self._logger.info(f'[{node_name}] : create_flavor 실행')
-        return self._connections[node_name].connection.compute.create_flavor(name=flavor_name,
-                                                                             vcpus=vcpus,
-                                                                             ram=ram,
-                                                                             disk=disk)
+
+        if self.find_flavor(flavor_name=flavor_name, node_name=node_name, logger_on=False) is None:
+            return self._connections[node_name].connection.compute.create_flavor(name=flavor_name,
+                                                                                 vcpus=vcpus,
+                                                                                 ram=ram,
+                                                                                 disk=disk)
+        else:
+            return None
 
     def delete_flavor(self, flavor_name: str, node_name: str, logger_on: bool = True) -> None:
         """
@@ -692,6 +711,9 @@ class OpenStackController:
             timeout_count += 1
 
         if timeout_count <= timeout:
+            raise Exception('타임아웃 시간 초과')
+
+        if container.status != 'Running':
             raise Exception('컨테이너가 Running 상태가 아닙니다.')
 
         return container

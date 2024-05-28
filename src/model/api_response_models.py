@@ -128,9 +128,10 @@ class UsingResourcesResponseDTO:
 
 
 class NetworkResponseDTO:
-    def __init__(self, name: str, subnet_cidr: str):
+    def __init__(self, name: str, subnet_cidr: str, is_external: bool):
         self.name = name
         self.subnet_cidr = subnet_cidr
+        self.is_external = is_external
 
 
 class NodeResponseDTO:

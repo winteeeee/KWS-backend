@@ -23,6 +23,7 @@ def networks():
         networks = session.scalars(select(Network)).all()
         for network in networks:
             result.append(NetworkResponseDTO(name=network.name,
-                                             subnet_cidr=network.cidr).__dict__)
+                                             subnet_cidr=network.cidr,
+                                             is_external=network.is_external).__dict__)
 
     return ApiResponse(status.HTTP_200_OK, result)

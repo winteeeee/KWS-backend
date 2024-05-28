@@ -58,7 +58,8 @@ def rental(container_info: ContainerCreateRequestDTO):
                 session.add(Network(
                     name=container_info.network_name,
                     cidr=container_info.subnet_cidr,
-                    is_default=False
+                    is_default=False,
+                    is_external=False,
                 ))
 
             # 해당 노드의 네트워크가 없다면

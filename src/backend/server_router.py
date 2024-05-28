@@ -86,7 +86,8 @@ def server_rent(server_info: ServerCreateRequestDTO):
                 session.add(Network(
                     name=server_info.network_name,
                     cidr=server_info.subnet_cidr,
-                    is_default=False
+                    is_default=False,
+                    is_external=False,
                 ))
     
             # 해당 노드의 네트워크가 없다면
@@ -181,7 +182,7 @@ def server_renew(server_name: str = Form(...),
                 backend_logger.error(e)
                 session.rollback()
                 return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
-        return ApiResponse(status.HTTP_200_OK, "대여 기간 연장 완료")
+        return ApiResponse(status.HTTP_200_OK, None)
     else:
         return ErrorResponse(status.HTTP_400_BAD_REQUEST, "입력한 정보가 잘못됨")
 
@@ -256,6 +257,6 @@ async def server_return(server_name: str = Form(...),
                 backend_logger.error(e)
                 return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
 
-        return ApiResponse(status.HTTP_200_OK, "서버 삭제 완료")
+        return ApiResponse(status.HTTP_200_OK, None)
     else:
         return ErrorResponse(status.HTTP_400_BAD_REQUEST, "입력한 정보가 잘못됨")

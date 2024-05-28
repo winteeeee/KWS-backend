@@ -78,6 +78,7 @@ class Network(Base):
     name: Mapped[str] = mapped_column(String(45), unique=True)
     cidr: Mapped[str] = mapped_column(String(45), unique=True)
     is_default: Mapped[bool] = mapped_column(Boolean)
+    is_external: Mapped[bool] = mapped_column(Boolean)
     servers: Mapped[list['Server']] = relationship()
     containers: Mapped[list['Container']] = relationship()
     node_networks: Mapped[list['NodeNetwork']] = relationship()

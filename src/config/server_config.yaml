@@ -1,7 +1,7 @@
 frontend:
-  host: "localhost"
-  port: 3000
+  host: ${env:FRONTEND_HOST}
+  port: ${env:FRONTEND_PORT}
 
 backend:
-  host: "0.0.0.0"
-  port: 8000
+  host: ${env:BACKEND_HOST}
+  port: ${env:BACKEND_PORT}

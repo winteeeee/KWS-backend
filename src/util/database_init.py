@@ -43,7 +43,8 @@ def insert_default_value():
                 session.add(Flavor(name=flavor['name'],
                                    vcpu=flavor['vcpu'],
                                    ram=flavor['ram'],
-                                   disk=flavor['disk']))
+                                   disk=flavor['disk'],
+                                   is_default=True))
 
         backend_logger.info('연관 관계 설정')
         for node in node_config['nodes']:

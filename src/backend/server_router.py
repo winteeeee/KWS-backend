@@ -5,14 +5,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database.factories import MySQLEngineFactory
-from model.db_models import Server, Container, Flavor, NodeFlavor, Network, NodeNetwork
-from model.api_models import (ApiResponse, ServerCreateRequestDTO, ServerRentalResponseDTO, ErrorResponse,
-                              ServersResponseDTO)
+from model.db_models import Server, Flavor, NodeFlavor, Network, NodeNetwork
+from model.api_request_models import ServerCreateRequestDTO
+from model.api_response_models import ApiResponse, ServerRentalResponseDTO, ErrorResponse, ServersResponseDTO
 from openStack.openstack_controller import OpenStackController
-from util.utils import validate_ssh_key, generator_len
+from util.utils import validate_ssh_key
 from util.backend_utils import network_isolation, network_delete
 from util.logger import get_logger
-from config.config import openstack_config, node_config
+from config.config import openstack_config
 
 server_router = APIRouter(prefix="/server")
 controller = OpenStackController()
@@ -60,7 +60,7 @@ def server_rent(server_info: ServerCreateRequestDTO):
                     is_default=False
                 ))
 
-            if session.scalars(select(NodeFlavor).where(NodeFlavor.flavor_name == server_info.flavor_name and
+            if session.scalars(select(NodeFlavor).where(NodeFlavor.flavor_name == server_info.flavor_name,
                                                         NodeFlavor.node_name == server_info.node_name)).one_or_none() is None:
                 backend_logger.info("커스텀 플레이버 생성 시작")
                 backend_logger.info(f"[{server_info.node_name}] : 커스텀 플레이버 생성 시작")
@@ -115,7 +115,12 @@ def server_rent(server_info: ServerCreateRequestDTO):
 
         try:
             backend_logger.info("서버 생성")
-            server, private_key = controller.create_server(server_info=server_info,
+            server, private_key = controller.create_server(server_name=server_info.server_name,
+                                                           image_name=server_info.image_name,
+                                                           flavor_name=server_info.flavor_name,
+                                                           network_name=server_info.network_name,
+                                                           password=server_info.password,
+                                                           cloud_init=server_info.cloud_init,
                                                            node_name=server_info.node_name)
             backend_logger.info("유동 IP 할당")
             floating_ip = controller.allocate_floating_ip(server=server, node_name=server_info.node_name)
@@ -204,35 +209,49 @@ async def server_return(server_name: str = Form(...),
                     .where(Server.server_name == server_name)
                 ).one()
                 network_name = server.network_name
+                flavor_name = server.flavor_name
                 backend_logger.info("서버 삭제")
                 controller.delete_server(server_name=server_name, node_name=server.node_name, server_ip=host_ip)
                 backend_logger.info("데이터베이스에 서버 삭제")
                 session.delete(server)
                 session.commit()
 
-                # TODO 요 밑으로 다시 짜야함
-                openstack_server = controller.find_server(server_name=server_name, node_name=server.node_name)
-                # 기본 제공 플레이버가 아니면 삭제
-                if openstack_server.flavor.original_name not in openstack_config['default_flavors']:
-                    if session.scalars(select(Server).where(Server.flavor_name == openstack_server.flavor.original_name)).one_or_none() is None:
-                        backend_logger.info("사용 중인 커스텀 플레이버 없음")
-                        backend_logger.info("커스텀 플레이버 삭제 시작")
-                        for node in node_config['nodes']:
-                            backend_logger.info(f"[{node['name']}] : 커스텀 플레이버 삭제 시작")
-                            controller.delete_flavor(flavor_name=openstack_server.flavor.original_name,
-                                                     node_name=node['name'])
+                # 커스텀 플레이버 삭제
+                flavor = session.scalars(select(Flavor).where(Flavor.name == flavor_name)).one()
+                if len(flavor.servers) == 0 and not flavor.is_default:
+                    backend_logger.info("커스텀 플레이버를 사용 중인 서버 없음")
+                    backend_logger.info("커스텀 플레이버 삭제")
 
-                if (network_name != openstack_config['external_network'] and
-                    network_name != openstack_config['default_internal_network'] and
-                    session.scalars(select(Server).where(Server.network_name == network_name)).one_or_none() is None and
-                        session.scalars(select(Container).where(Container.network_name == network_name)).one_or_none() is None):
-                    backend_logger.info("사용 중인 내부 네트워크 없음")
+                    backend_logger.info("데이터베이스에 플레이버 삭제")
+                    target_node_flavors = session.scalars(select(NodeFlavor)
+                                                          .where(NodeFlavor.flavor_name == flavor_name)).all()
+                    # 외래키 제약 조건이 있으니 중간 테이블부터 삭제
+                    for target_node_flavor in target_node_flavors:
+                        controller.delete_flavor(flavor_name=target_node_flavor.flavor_name,
+                                                 node_name=target_node_flavor.node_name)
+                        session.delete(target_node_flavor)
+                    session.delete(flavor)
+
+                # 내부 네트워크 삭제
+                network = session.scalars(select(Network).where(Network.name == network_name)).one()
+                attached_servers_on_network = len(network.servers)
+                attached_containers_on_network = len(network.containers)
+                if attached_servers_on_network + attached_containers_on_network == 0 and not network.is_default:
+                    backend_logger.info("내부 네트워크를 사용 중인 서버/컨테이너 없음")
                     backend_logger.info("내부 네트워크 삭제 시작")
-                    for node in node_config['nodes']:
+
+                    backend_logger.info("데이터베이스에 네트워크 삭제")
+                    target_node_networks = session.scalars(
+                        select(NodeNetwork).where(NodeNetwork.network_name == network_name)).all()
+                    # 외래키 제약 조건이 있으니 중간 테이블부터 삭제
+                    for target_node_network in target_node_networks:
                         network_delete(controller=controller,
-                                       node_name=node['name'],
+                                       node_name=target_node_network.node_name,
                                        backend_logger=backend_logger,
-                                       network_name=network_name)
+                                       network_name=target_node_network.network_name)
+                        session.delete(target_node_network)
+                    session.delete(network)
+                session.commit()
             except Exception as e:
                 backend_logger.error(e)
                 return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")

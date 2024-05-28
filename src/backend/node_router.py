@@ -3,8 +3,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database.factories import MySQLEngineFactory
-from model.api_models import (ApiResponse, UsingResourceDTO, UsingResourcesResponseDTO, NodeUsingResourceDTO,
-                              NodeSpecDTO, NodesSpecResponseDTO, ResourceResponseDTO)
+from model.api_response_models import (ApiResponse, UsingResourceDTO, UsingResourcesResponseDTO, NodeUsingResourceDTO,
+                                       NodeSpecDTO, NodesSpecResponseDTO, ResourceResponseDTO, NodeResponseDTO)
 from model.db_models import Node, Server
 from openStack.openstack_controller import OpenStackController
 from util.logger import get_logger
@@ -17,8 +17,18 @@ backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/b
 
 
 @node_router.get("/list")
-def node_list():
-    pass
+def node_list_show():
+    node_list = []
+    backend_logger.info("노드 목록 요청 수신")
+
+    with Session(db_connection) as session, session.begin():
+        nodes = session.scalars(select(Node)).all()
+        for node in nodes:
+            node_list.append(NodeResponseDTO(name=node.name,
+                                             vcpu=node.vcpu,
+                                             ram=node.ram,
+                                             disk=node.disk).__dict__)
+    return ApiResponse(status.HTTP_200_OK, node_list)
 
 
 @node_router.get("/resources")

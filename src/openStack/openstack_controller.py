@@ -1,7 +1,6 @@
 import time
 import openstack
 
-from model.api_models import ServerCreateRequestDTO
 from util.utils import cloud_init_creator
 from util.logger import get_logger
 from openStack.connection import get_connections, Connection
@@ -88,14 +87,27 @@ class OpenStackController:
             self._logger.info(f'[{node_name}] : find_server 실행')
         return self._connections[node_name].connection.compute.find_server(server_name)
 
-    def create_server(self, server_info: ServerCreateRequestDTO, node_name: str, logger_on: bool = True) -> openstack.compute.v2.server.Server:
+    def create_server(self,
+                      server_name: str,
+                      image_name: str,
+                      flavor_name: str,
+                      network_name: str,
+                      password: str,
+                      cloud_init: str,
+                      node_name: str,
+                      logger_on: bool = True) -> openstack.compute.v2.server.Server:
         """
         UC-0101 서버 대여 / UC-0202 인스턴스 생성
         서버 정보를 바탕으로 인스턴스를 생성합니다.
         password가 입력된 경우 password로 접속이 가능하도록 설정하며,
         그게 아닌 경우 키페어를 할당합니다.
 
-        :param server_info: 생성할 서버 정보
+        :param server_name: 생성할 서버의 이름
+        :param image_name: 생성할 서버의 이미지 이름
+        :param flavor_name: 생성할 서버의 플레이버 이름
+        :param network_name: 생성할 서버의 네트워크 이름
+        :param password: 생성할 서버의 비밀번호 None일 경우 키페어 자동 할당
+        :param cloud_init: 생성할 서버에 적용할 cloud-init
         :param node_name: 접근할 노드명
         :param logger_on: 로그 온/오프
         :return: 서버 객체
@@ -104,16 +116,16 @@ class OpenStackController:
             self._logger.info(f'[{node_name}] : create_server 실행')
 
         kwargs = {
-            "name": server_info.server_name,
-            "image": self.find_image(server_info.image_name, node_name=node_name,logger_on=False).id,
-            "flavor": self.find_flavor(server_info.flavor_name, node_name=node_name, logger_on=False).id,
-            "network": self.find_network(server_info.network_name, node_name=node_name, logger_on=False).id,
+            "name": server_name,
+            "image": self.find_image(image_name, node_name=node_name,logger_on=False).id,
+            "flavor": self.find_flavor(flavor_name, node_name=node_name, logger_on=False).id,
+            "network": self.find_network(network_name, node_name=node_name, logger_on=False).id,
         }
 
-        if server_info.password is None:
+        if password is None:
             if logger_on:
                 self._logger.info(f"[{node_name}] : 인스턴스에 키페어 할당")
-            keypair = self.find_key_pair(f"{server_info.server_name}_keypair", logger_on=False)
+            keypair = self.find_key_pair(f"{server_name}_keypair", node_name=node_name, logger_on=False)
             private_key = keypair.private_key
             kwargs["key_name"] = keypair.name
         else:
@@ -121,9 +133,9 @@ class OpenStackController:
                 self._logger.info(f"[{node_name}] : 인스턴스에 비밀번호 할당")
             private_key = ""
 
-        cloud_init = cloud_init_creator(server_name=server_info.server_name,
-                                        password=server_info.password,
-                                        user_data=server_info.cloud_init)
+        cloud_init = cloud_init_creator(server_name=server_name,
+                                        password=password,
+                                        user_data=cloud_init)
         kwargs["userdata"] = cloud_init
 
         if logger_on:

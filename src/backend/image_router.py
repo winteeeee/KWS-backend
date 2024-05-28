@@ -1,7 +1,7 @@
 from fastapi import APIRouter, status
 
 from database.factories import MySQLEngineFactory
-from model.api_models import ApiResponse, ImageListResponseDTO, ErrorResponse
+from model.api_response_models import ApiResponse, ImageListResponseDTO, ErrorResponse
 from openStack.openstack_controller import OpenStackController
 from util.logger import get_logger
 from config.config import node_config
@@ -15,7 +15,7 @@ backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/b
 @image_router.get("/list")
 def image_list_show():
     try:
-        backend_logger.info("이미지 조회")
+        backend_logger.info("이미지 조회 요청 수신")
         # 이미지는 노드 별로 달라질 수 없으므로 0번째 노드만 탐색
         images = controller.find_images(node_name=node_config['nodes'][0]['name'])
     except Exception as e:

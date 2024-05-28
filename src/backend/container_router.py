@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from openStack.openstack_controller import OpenStackController
 from database.factories import MySQLEngineFactory
-from model.api_models import (ContainerCreateRequestDTO, ErrorResponse, ApiResponse, ContainerReturnRequestDTO,
-                              ContainersResponseDTO, ContainerExtensionRequestDTO)
+from model.api_request_models import ContainerCreateRequestDTO, ContainerExtensionRequestDTO, ContainerReturnRequestDTO
+from model.api_response_models import ApiResponse, ErrorResponse, ContainersResponseDTO
 from model.db_models import Container, Network, NodeNetwork
 from util.utils import create_env_dict
 from util.logger import get_logger
@@ -190,9 +190,7 @@ def container_return(container_info: ContainerReturnRequestDTO):
                                    backend_logger=backend_logger,
                                    network_name=target_node_network.network_name)
                     session.delete(target_node_network)
-
-                target_network = session.scalars(select(Network).where(Network.name == network_name)).one()
-                session.delete(target_network)
+                session.delete(network)
             session.commit()
         except Exception as e:
             backend_logger.error(e)

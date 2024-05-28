@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database.factories import MySQLEngineFactory
-from model.api_models import ApiResponse, FlavorListResponseDTO
+from model.api_response_models import ApiResponse, FlavorListResponseDTO
 from openStack.openstack_controller import OpenStackController
 from util.logger import get_logger
 from model.db_models import Flavor
@@ -17,7 +17,7 @@ backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/b
 @flavor_router.get("/list")
 def flavor_list_show():
     flavor_list = []
-    backend_logger.info("플레이버 조회")
+    backend_logger.info("플레이버 조회 요청 수신")
 
     with Session(db_connection) as session, session.begin():
         flavors = session.scalars(select(Flavor).where(Flavor.is_default)).all()

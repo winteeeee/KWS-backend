@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database.factories import MySQLEngineFactory
-from model.api_models import ApiResponse, NetworkResponseDTO
+from model.api_response_models import ApiResponse, NetworkResponseDTO
 from openStack.openstack_controller import OpenStackController
 from util.logger import get_logger
 from model.db_models import Network
@@ -17,7 +17,7 @@ backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/b
 @network_router.get("/list")
 def networks():
     result = []
-    backend_logger.info("네트워크 조회")
+    backend_logger.info("네트워크 조회 요청 수신")
 
     with Session(db_connection) as session, session.begin():
         networks = session.scalars(select(Network)).all()

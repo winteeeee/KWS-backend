@@ -1,50 +1,7 @@
 import json
 from datetime import datetime
 
-from pydantic import BaseModel
 from fastapi import Response
-
-
-class ServerCreateRequestDTO(BaseModel):
-    user_name: str
-    server_name: str
-    start_date: str
-    end_date: str
-    image_name: str
-    flavor_name: str
-    vcpus: int | None
-    ram: int | None
-    disk: int | None
-    network_name: str | None
-    subnet_cidr: str | None
-    password: str | None
-    cloud_init: str | None
-    node_name: str
-
-
-class ContainerCreateRequestDTO(BaseModel):
-    user_name: str
-    container_name: str
-    start_date: str
-    end_date: str
-    image_name: str
-    password: str
-    network_name: str | None
-    subnet_cidr: str | None
-    env: str | None
-    cmd: list | None
-    node_name: str
-
-
-class ContainerReturnRequestDTO(BaseModel):
-    container_name: str
-    password: str
-
-
-class ContainerExtensionRequestDTO(BaseModel):
-    container_name: str
-    password: str
-    end_date: str
 
 
 class ApiResponse(Response):
@@ -57,7 +14,7 @@ class ApiResponse(Response):
 
 
 class ErrorResponse(Response):
-    def __init__(self, code:int, message: str):
+    def __init__(self, code: int, message: str):
         super().__init__(
             status_code=code,
             content=message
@@ -174,3 +131,11 @@ class NetworkResponseDTO:
     def __init__(self, name: str, subnet_cidr: str):
         self.name = name
         self.subnet_cidr = subnet_cidr
+
+
+class NodeResponseDTO:
+    def __init__(self, name: str, vcpu: int, ram: int, disk: int):
+        self.name = name
+        self.vcpu = vcpu
+        self.ram = ram
+        self.disk = disk

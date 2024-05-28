@@ -43,7 +43,7 @@ def rental(container_info: ContainerCreateRequestDTO):
     with Session(db_connection) as session:
         if container_info.network_name is None:
             backend_logger.info("외부 네트워크 사용")
-            container_info.network_name = openstack_config['external_network']
+            container_info.network_name = openstack_config['external_network']['name']
 
         backend_logger.info("컨테이너 중복 여부 검사")
         if session.scalars(select(Container).where(Container.container_name == container_info.container_name)).one_or_none() is not None:

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from model.db_models import Base, Node, Network, Flavor, NodeNetwork, NodeFlavor
 from database.factories import MySQLEngineFactory
-from config.config import node_config
+from config.config import node_config, openstack_config
 from util.logger import get_logger
 
 backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/backend")
@@ -26,48 +26,34 @@ def insert_default_value():
                 session.add(Node(**node))
 
         backend_logger.info('기본 네트워크 주입')
-        if session.scalars(select(Network).where(Network.name == 'public')).one_or_none() is None:
-            session.add(Network(name='public',
-                                cidr='192.168.0.0/24',
-                                is_default=True))
-        if session.scalars(select(Network).where(Network.name == 'default')).one_or_none() is None:
-            session.add(Network(name='default',
-                                cidr='192.168.233.0/24',
-                                is_default=True))
+        if session.scalars(select(Network).where(Network.name == openstack_config['external_network']['name'])).one_or_none() is None:
+            session.add(Network(name=openstack_config['external_network']['name'],
+                                cidr=openstack_config['external_network']['cidr'],
+                                is_default=True,
+                                is_external=True))
+        if session.scalars(select(Network).where(Network.name == openstack_config['internal_network']['name'])).one_or_none() is None:
+            session.add(Network(name=openstack_config['internal_network']['name'],
+                                cidr=openstack_config['internal_network']['cidr'],
+                                is_default=True,
+                                is_external=False))
 
         backend_logger.info('기본 플레이버 주입')
-        if session.scalars(select(Flavor).where(Flavor.name == 'kws_small')).one_or_none() is None:
-            session.add(Flavor(name='kws_small',
-                               vcpu=1,
-                               ram=512,
-                               disk=5,
-                               is_default=True))
-        if session.scalars(select(Flavor).where(Flavor.name == 'kws_medium')).one_or_none() is None:
-            session.add(Flavor(name='kws_medium',
-                               vcpu=1,
-                               ram=1024,
-                               disk=10,
-                               is_default=True))
-        if session.scalars(select(Flavor).where(Flavor.name == 'kws_large')).one_or_none() is None:
-            session.add(Flavor(name='kws_large',
-                               vcpu=2,
-                               ram=2048,
-                               disk=20,
-                               is_default=True))
+        for flavor in openstack_config['flavors']:
+            if session.scalars(select(Flavor).where(Flavor.name == flavor['name'])).one_or_none() is None:
+                session.add(Flavor(name=flavor['name'],
+                                   vcpu=flavor['vcpu'],
+                                   ram=flavor['ram'],
+                                   disk=flavor['disk']))
 
         backend_logger.info('연관 관계 설정')
         for node in node_config['nodes']:
             if len(session.scalars(select(NodeNetwork).where(NodeNetwork.node_name == node['name'])).all()) == 0:
                 session.add(NodeNetwork(node_name=node['name'],
-                                        network_name='public'))
+                                        network_name=openstack_config['external_network']['name']))
                 session.add(NodeNetwork(node_name=node['name'],
-                                        network_name='default'))
+                                        network_name=openstack_config['internal_network']['name']))
             if len(session.scalars(select(NodeFlavor).where(NodeFlavor.node_name == node['name'])).all()) == 0:
-                session.add(NodeFlavor(node_name=node['name'],
-                                       flavor_name='kws_small'))
-                session.add(NodeFlavor(node_name=node['name'],
-                                       flavor_name='kws_medium'))
-                session.add(NodeFlavor(node_name=node['name'],
-                                       flavor_name='kws_large'))
-
+                for flavor in openstack_config['flavors']:
+                    session.add(NodeFlavor(node_name=node['name'],
+                                           flavor_name=flavor['name']))
         session.commit()

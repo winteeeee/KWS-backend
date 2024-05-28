@@ -40,7 +40,7 @@ def server_rent(server_info: ServerCreateRequestDTO):
     with Session(db_connection) as session:
         if server_info.network_name is None:
             backend_logger.info("기본 내부 네트워크 사용")
-            server_info.network_name = openstack_config['default_internal_network']
+            server_info.network_name = openstack_config['internal_network']['name']
         
         backend_logger.info("서버 이름 중복 여부 검사")
         if session.scalars(select(Server).where(Server.server_name == server_info.server_name)).one_or_none() is not None:

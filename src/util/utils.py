@@ -1,4 +1,5 @@
 import paramiko
+import re
 
 
 def cloud_init_creator(server_name: str,
@@ -63,3 +64,8 @@ def create_env_dict(env: str) -> dict:
         result = None
 
     return result
+
+
+def alphabet_check(s: str):
+    pattern = r'^[a-zA-Z0-9]+$'
+    return bool(re.match(pattern, s))

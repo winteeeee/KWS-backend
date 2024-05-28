@@ -10,7 +10,7 @@ from database.factories import MySQLEngineFactory
 from model.api_request_models import ContainerCreateRequestDTO, ContainerExtensionRequestDTO, ContainerReturnRequestDTO
 from model.api_response_models import ApiResponse, ErrorResponse, ContainersResponseDTO
 from model.db_models import Container, Network, NodeNetwork
-from util.utils import create_env_dict
+from util.utils import create_env_dict, alphabet_check
 from util.logger import get_logger
 from util.backend_utils import network_isolation, network_delete
 from config.config import openstack_config
@@ -41,13 +41,17 @@ def container_show():
 def rental(container_info: ContainerCreateRequestDTO):
     backend_logger.info("컨테이너 대여 요청 수신")
     with Session(db_connection) as session:
-        if container_info.network_name is None:
-            backend_logger.info("외부 네트워크 사용")
-            container_info.network_name = openstack_config['external_network']['name']
-
         backend_logger.info("컨테이너 중복 여부 검사")
         if session.scalars(select(Container).where(Container.container_name == container_info.container_name)).one_or_none() is not None:
             return ErrorResponse(status.HTTP_400_BAD_REQUEST, "컨테이너 이름 중복")
+
+        backend_logger.info("컨테이너 이름 검사")
+        if not alphabet_check(container_info.container_name):
+            return ErrorResponse(status.HTTP_400_BAD_REQUEST, "컨테이너 이름은 알파벳과 숫자로만 구성되어야 합니다.")
+
+        if container_info.network_name is None:
+            backend_logger.info("외부 네트워크 사용")
+            container_info.network_name = openstack_config['external_network']['name']
 
         backend_logger.info("네트워크 분리 여부 검사")
         # 해당 네트워크가 없다면

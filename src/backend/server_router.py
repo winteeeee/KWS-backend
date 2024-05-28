@@ -9,7 +9,7 @@ from model.db_models import Server, Flavor, NodeFlavor, Network, NodeNetwork
 from model.api_request_models import ServerCreateRequestDTO
 from model.api_response_models import ApiResponse, ServerRentalResponseDTO, ErrorResponse, ServersResponseDTO
 from openStack.openstack_controller import OpenStackController
-from util.utils import validate_ssh_key
+from util.utils import validate_ssh_key, alphabet_check
 from util.backend_utils import network_isolation, network_delete
 from util.logger import get_logger
 from config.config import openstack_config
@@ -38,14 +38,17 @@ def server_show():
 def server_rent(server_info: ServerCreateRequestDTO):
     backend_logger.info("서버 대여 요청 수신")
     with Session(db_connection) as session:
-        if server_info.network_name is None:
-            backend_logger.info("기본 내부 네트워크 사용")
-            server_info.network_name = openstack_config['internal_network']['name']
-        
         backend_logger.info("서버 이름 중복 여부 검사")
         if session.scalars(select(Server).where(Server.server_name == server_info.server_name)).one_or_none() is not None:
             return ErrorResponse(status.HTTP_400_BAD_REQUEST, "서버 이름 중복")
 
+        backend_logger.info("서버 이름 검사")
+        if not alphabet_check(server_info.container_name):
+            return ErrorResponse(status.HTTP_400_BAD_REQUEST, "서버 이름은 알파벳과 숫자로만 구성되어야 합니다.")
+
+        if server_info.network_name is None:
+            backend_logger.info("기본 내부 네트워크 사용")
+            server_info.network_name = openstack_config['internal_network']['name']
 
         try:
             backend_logger.info("커스텀 플레이버 생성 여부 검사")

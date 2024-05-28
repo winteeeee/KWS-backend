@@ -66,6 +66,8 @@ def rental(container_info: ContainerCreateRequestDTO):
                     is_external=False,
                 ))
 
+            # TODO 컨테이너 node_name은 어떤 방식으로 자동 할당 시킬 것인가
+
             # 해당 노드의 네트워크가 없다면
             if session.scalars(select(NodeNetwork).where(NodeNetwork.network_name == container_info.network_name,
                                                          NodeNetwork.node_name == container_info.node_name)).one_or_none() is None:

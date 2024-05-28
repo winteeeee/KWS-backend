@@ -16,6 +16,9 @@ class OpenStackController:
             cls.instance = super().__new__(cls)
         return cls.instance
 
+    def kws_init(self, node_name: str):
+        pass
+
     def monitoring_resources(self, node_name, logger_on: bool = True) -> dict:
         """
         UC- 서버 자원 현황 조회

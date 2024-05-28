@@ -15,7 +15,6 @@ class ServerCreateRequestDTO(BaseModel):
     subnet_cidr: str | None
     password: str | None
     cloud_init: str | None
-    node_name: str
 
 
 class ContainerCreateRequestDTO(BaseModel):

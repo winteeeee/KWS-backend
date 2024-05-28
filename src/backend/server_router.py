@@ -12,6 +12,7 @@ from openStack.openstack_controller import OpenStackController
 from util.utils import validate_ssh_key, alphabet_check
 from util.backend_utils import network_isolation, network_delete
 from util.logger import get_logger
+from util.selector import get_available_node
 from config.config import openstack_config
 
 server_router = APIRouter(prefix="/server")
@@ -43,8 +44,11 @@ def server_rent(server_info: ServerCreateRequestDTO):
             return ErrorResponse(status.HTTP_400_BAD_REQUEST, "서버 이름 중복")
 
         backend_logger.info("서버 이름 검사")
-        if not alphabet_check(server_info.container_name):
+        if not alphabet_check(server_info.server_name):
             return ErrorResponse(status.HTTP_400_BAD_REQUEST, "서버 이름은 알파벳과 숫자로만 구성되어야 합니다.")
+
+        backend_logger.info("노드 선택")
+        node_name = get_available_node(server_info.vcpus, server_info.ram, server_info.disk)
 
         if server_info.network_name is None:
             backend_logger.info("기본 내부 네트워크 사용")
@@ -64,11 +68,11 @@ def server_rent(server_info: ServerCreateRequestDTO):
                 ))
 
             if session.scalars(select(NodeFlavor).where(NodeFlavor.flavor_name == server_info.flavor_name,
-                                                        NodeFlavor.node_name == server_info.node_name)).one_or_none() is None:
+                                                        NodeFlavor.node_name == node_name)).one_or_none() is None:
                 backend_logger.info("커스텀 플레이버 생성 시작")
-                backend_logger.info(f"[{server_info.node_name}] : 커스텀 플레이버 생성 시작")
+                backend_logger.info(f"[{node_name}] : 커스텀 플레이버 생성 시작")
                 controller.create_flavor(flavor_name=server_info.flavor_name,
-                                         node_name=server_info.node_name,
+                                         node_name=node_name,
                                          vcpus=server_info.vcpus,
                                          ram=server_info.ram,
                                          disk=server_info.disk)
@@ -76,14 +80,14 @@ def server_rent(server_info: ServerCreateRequestDTO):
             backend_logger.error(e)
             session.rollback()
             controller.delete_flavor(flavor_name=server_info.flavor_name,
-                                     node_name=server_info.node_name)
+                                     node_name=node_name)
             return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "커스텀 플레이버 생성 오류")
 
         # 네트워크 분리 적용
         backend_logger.info("네트워크 분리 여부 검사")
         try:
             # 해당 네트워크가 없다면
-            if session.scalars(select(Network).where(Network.name == server_info.network_name)).one_or_none() is None:
+            if len(session.scalars(select(Network).where(Network.name == server_info.network_name)).all()) == 0:
                 backend_logger.info("시스템에 해당 네트워크 존재하지 않음")
                 backend_logger.info("데이터베이스에 네트워크 삽입")
                 session.add(Network(
@@ -94,28 +98,30 @@ def server_rent(server_info: ServerCreateRequestDTO):
                 ))
     
             # 해당 노드의 네트워크가 없다면
-            if session.scalars(select(NodeNetwork).where(NodeNetwork.network_name == server_info.network_name and
-                                                         NodeNetwork.node_name == server_info.node_name)).one_or_none() is None:
+            if session.scalars(select(NodeNetwork).where(NodeNetwork.network_name == server_info.network_name,
+                                                         NodeNetwork.node_name == node_name)).one_or_none() is None:
                 network_isolation(controller=controller,
-                                  node_name=server_info.node_name,
+                                  node_name=node_name,
                                   backend_logger=backend_logger,
                                   network_name=server_info.network_name,
                                   subnet_cidr=server_info.subnet_cidr)
     
-                session.add(NodeNetwork(node_name=server_info.node_name,
+                session.add(NodeNetwork(node_name=node_name,
                                         network_name=server_info.network_name))
         except Exception as e:
             backend_logger.error(e)
             # 네트워크 분리 복구
             node_network = session.scalars(select(NodeNetwork).where(NodeNetwork.network_name == server_info.network_name,
-                                                         NodeNetwork.node_name == server_info.node_name)).one_or_none()
+                                                         NodeNetwork.node_name == node_name)).one_or_none()
             if node_network is not None and not node_network.network.is_default:
                 network_delete(controller=controller,
-                               node_name=server_info.node_name,
+                               node_name=node_name,
                                network_name=server_info.network_name,
                                backend_logger=backend_logger)
             session.rollback()
             return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "네트워크 분리 오류")
+
+
 
         try:
             backend_logger.info("서버 생성")
@@ -125,9 +131,9 @@ def server_rent(server_info: ServerCreateRequestDTO):
                                                            network_name=server_info.network_name,
                                                            password=server_info.password,
                                                            cloud_init=server_info.cloud_init,
-                                                           node_name=server_info.node_name)
+                                                           node_name=node_name)
             backend_logger.info("유동 IP 할당")
-            floating_ip = controller.allocate_floating_ip(server=server, node_name=server_info.node_name)
+            floating_ip = controller.allocate_floating_ip(server=server, node_name=node_name)
 
             server = Server(
                 user_name=server_info.user_name,
@@ -136,7 +142,7 @@ def server_rent(server_info: ServerCreateRequestDTO):
                 end_date=server_info.end_date,
                 floating_ip=floating_ip,
                 network_name=server_info.network_name,
-                node_name=server_info.node_name,
+                node_name=node_name,
                 flavor_name=server_info.flavor_name,
                 image_name=server_info.image_name
             )
@@ -147,7 +153,7 @@ def server_rent(server_info: ServerCreateRequestDTO):
             backend_logger.error(e)
             session.rollback()
             controller.delete_server(server_name=server_info.server_name,
-                                     node_name=server_info.node_name,
+                                     node_name=node_name,
                                      server_ip=floating_ip)
             return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
         

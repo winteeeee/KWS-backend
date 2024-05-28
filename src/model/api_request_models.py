@@ -28,7 +28,6 @@ class ContainerCreateRequestDTO(BaseModel):
     subnet_cidr: str | None
     env: str | None
     cmd: list | None
-    node_name: str
 
 
 class ContainerReturnRequestDTO(BaseModel):

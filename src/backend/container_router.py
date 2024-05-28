@@ -11,6 +11,7 @@ from model.api_request_models import ContainerCreateRequestDTO, ContainerExtensi
 from model.api_response_models import ApiResponse, ErrorResponse, ContainersResponseDTO
 from model.db_models import Container, Network, NodeNetwork
 from util.utils import create_env_dict, alphabet_check
+from util.selector import get_available_container_node
 from util.logger import get_logger
 from util.backend_utils import network_isolation, network_delete
 from config.config import openstack_config
@@ -49,6 +50,9 @@ def rental(container_info: ContainerCreateRequestDTO):
         if not alphabet_check(container_info.container_name):
             return ErrorResponse(status.HTTP_400_BAD_REQUEST, "컨테이너 이름은 알파벳과 숫자로만 구성되어야 합니다.")
 
+        backend_logger.info("노드 선택")
+        node_name = get_available_container_node()
+
         if container_info.network_name is None:
             backend_logger.info("외부 네트워크 사용")
             container_info.network_name = openstack_config['external_network']['name']
@@ -66,27 +70,25 @@ def rental(container_info: ContainerCreateRequestDTO):
                     is_external=False,
                 ))
 
-            # TODO 컨테이너 node_name은 어떤 방식으로 자동 할당 시킬 것인가
-
             # 해당 노드의 네트워크가 없다면
             if session.scalars(select(NodeNetwork).where(NodeNetwork.network_name == container_info.network_name,
-                                                         NodeNetwork.node_name == container_info.node_name)).one_or_none() is None:
+                                                         NodeNetwork.node_name == node_name)).one_or_none() is None:
                 network_isolation(controller=controller,
-                                  node_name=container_info.node_name,
+                                  node_name=node_name,
                                   backend_logger=backend_logger,
                                   network_name=container_info.network_name,
                                   subnet_cidr=container_info.subnet_cidr)
 
-                session.add(NodeNetwork(node_name=container_info.node_name,
+                session.add(NodeNetwork(node_name=node_name,
                                         network_name=container_info.network_name))
         except Exception as e:
             backend_logger.error(e)
             # 네트워크 분리 복구
             node_network = session.scalars(select(NodeNetwork).where(NodeNetwork.network_name == container_info.network_name,
-                                                         NodeNetwork.node_name == container_info.node_name)).one_or_none()
+                                                         NodeNetwork.node_name == node_name)).one_or_none()
             if node_network is not None and not node_network.network.is_default:
                 network_delete(controller=controller,
-                               node_name=container_info.node_name,
+                               node_name=node_name,
                                network_name=container_info.network_name,
                                backend_logger=backend_logger)
             session.rollback()
@@ -95,7 +97,7 @@ def rental(container_info: ContainerCreateRequestDTO):
         try:
             backend_logger.info("컨테이너 생성")
             container = controller.create_container(container_name=container_info.container_name,
-                                                    node_name=container_info.node_name,
+                                                    node_name=node_name,
                                                     image_name=container_info.image_name,
                                                     network_name=container_info.network_name,
                                                     env=create_env_dict(container_info.env),
@@ -113,7 +115,7 @@ def rental(container_info: ContainerCreateRequestDTO):
                 ip=list(container.addresses.values())[0][0]['addr'],
                 port=str(container.ports),
                 network_name=container_info.network_name,
-                node_name=container_info.node_name
+                node_name=node_name
             )
             backend_logger.info("데이터베이스에 인스턴스 저장")
             session.add(container)
@@ -122,7 +124,7 @@ def rental(container_info: ContainerCreateRequestDTO):
             backend_logger.error(e)
             session.rollback()
             controller.delete_container(container_name=container_info.container_name,
-                                        node_name=container_info.node_name)
+                                        node_name=node_name)
             return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
 
         return ApiResponse(status.HTTP_201_CREATED, None)

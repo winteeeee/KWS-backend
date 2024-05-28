@@ -2,8 +2,18 @@ nodes:
   - name: "node1"
     vcpu: 6
     ram: 6
-    disk: 80
+    disk: 350
     auth_url: "http://192.168.0.83/identity"
+  - name: "node2"
+    vcpu: 6
+    ram: 6
+    disk: 350
+    auth_url: "http://192.168.0.14/identity"
+  - name: "node3"
+    vcpu: 6
+    ram: 6
+    disk: 80
+    auth_url: "http://192.168.0.16/identity"
   - name: "node4"
     vcpu: 6
     ram: 6

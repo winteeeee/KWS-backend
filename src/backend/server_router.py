@@ -49,6 +49,8 @@ def server_rent(server_info: ServerCreateRequestDTO):
 
         backend_logger.info("노드 선택")
         node_name = get_available_node(server_info.vcpus, server_info.ram, server_info.disk)
+        if node_name is None:
+            return ErrorResponse(status.HTTP_406_NOT_ACCEPTABLE, "시스템의 리소스가 부족합니다.")
 
         if server_info.network_name is None:
             backend_logger.info("기본 내부 네트워크 사용")

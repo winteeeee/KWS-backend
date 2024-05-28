@@ -10,6 +10,7 @@ from config.config import node_config
 controller = OpenStackController()
 db_connection = MySQLEngineFactory().get_instance()
 backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/backend")
+node_idx = 0
 
 
 def get_remaining_resources():
@@ -51,3 +52,14 @@ def get_available_node(vcpu: int, ram: int, disk: int):
     for node in nodes:
         if vcpu <= node["vcpu"] and int(ram / 1024) <= node["ram"] and disk <= node["disk"]:
             return node["name"]
+
+    return None
+
+
+def get_available_container_node():
+    global node_idx
+
+    nodes = node_config['nodes']
+    node_name = nodes[node_idx]['name']
+    node_idx = (node_idx + 1) % len(nodes)
+    return node_name

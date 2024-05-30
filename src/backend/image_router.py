@@ -20,7 +20,7 @@ def image_list_show():
         images = controller.find_images(node_name=node_config['nodes'][0]['name'])
     except Exception as e:
         backend_logger.error(e)
-        return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
+        return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e))
 
     image_list = [ImageListResponseDTO(image.name).__dict__ for image in images]
     return ApiResponse(status.HTTP_200_OK, image_list)

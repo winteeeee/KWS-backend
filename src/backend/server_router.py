@@ -1,5 +1,4 @@
 import io
-from datetime import date
 from fastapi import APIRouter, Form, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,8 +8,8 @@ from model.db_models import Server, Flavor, NodeFlavor
 from model.api_request_models import ServerCreateRequestDTO
 from model.api_response_models import ApiResponse, ServerRentalResponseDTO, ErrorResponse, ServersResponseDTO
 from openStack.openstack_controller import OpenStackController
-from util.utils import validate_ssh_key, alphabet_check
-from util.backend_utils import create_network, network_delete
+from util.utils import validate_ssh_key, alphabet_check, str_to_date, extension_date_check
+from util.backend_utils import create_network, network_delete, network_rollback, flavor_delete
 from util.logger import get_logger
 from util.selector import get_available_node
 from config.config import openstack_config
@@ -113,17 +112,19 @@ def server_rent(server_info: ServerCreateRequestDTO):
             session.commit()
         except Exception as e:
             backend_logger.error(e)
-            controller.delete_flavor(flavor_name=server_info.flavor_name,
-                                     node_name=node_name)
-            controller.remove_interface_from_router(router_name=openstack_config['router'],
-                                                    node_name=node_name,
-                                                    internal_subnet_name=f'{server_info.network_name}_subnet')
-            controller.delete_network(network_name=server_info.network_name, node_name=node_name)
+            flavor = session.scalars(select(Flavor).where(Flavor.name == server_info.flavor_name)).one()
+            if not flavor.is_default:
+                controller.delete_flavor(flavor_name=server_info.flavor_name,
+                                         node_name=node_name)
+            network_rollback(session=session,
+                             controller=controller,
+                             network_name=server_info.network_name,
+                             node_name=node_name)
             controller.delete_server(server_name=server_info.server_name,
                                      node_name=node_name,
                                      server_ip=floating_ip)
             session.rollback()
-            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
+            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e))
         
     name = f'{server_info.server_name}_keypair.pem' if private_key != "" else ""
     return ApiResponse(status.HTTP_201_CREATED, ServerRentalResponseDTO(name, private_key).__dict__)
@@ -151,24 +152,28 @@ def server_renew(server_name: str = Form(...),
                     select(Server)
                     .where(Server.server_name == server_name)
                 ).one()
-                split_date = end_date.split(sep='-')
-                server.end_date = date(int(split_date[0]), int(split_date[1]), int(split_date[2]))
+
+                new_end_date = str_to_date(end_date)
+                if not extension_date_check(old_end_date=server.end_date, new_end_date=new_end_date):
+                    return ErrorResponse(status.HTTP_400_BAD_REQUEST, "현재 대여 종료 일자 이후의 날짜를 선택 해야 합니다.")
+
+                server.end_date = new_end_date
                 session.add(server)
                 session.commit()
             except Exception as e:
                 backend_logger.error(e)
                 session.rollback()
-                return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
+                return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e))
         return ApiResponse(status.HTTP_200_OK, None)
     else:
         return ErrorResponse(status.HTTP_400_BAD_REQUEST, "입력한 정보가 잘못됨")
 
 
 @server_router.delete("/return")
-async def server_return(server_name: str = Form(...),
-                        host_ip: str = Form(...),
-                        password: str = Form(""),
-                        key_file: UploadFile = Form("")):
+def server_return(server_name: str = Form(...),
+                  host_ip: str = Form(...),
+                  password: str = Form(""),
+                  key_file: UploadFile = Form("")):
     backend_logger.info("서버 반환 요청 수신")
     key_file = io.StringIO(key_file.file.read().decode('utf-8')) \
         if key_file != "" else key_file
@@ -196,23 +201,10 @@ async def server_return(server_name: str = Form(...),
                 session.delete(server)
                 session.commit()
 
-                # 커스텀 플레이버 삭제
-                flavor = session.scalars(select(Flavor).where(Flavor.name == flavor_name)).one()
-                if len(flavor.servers) == 0 and not flavor.is_default:
-                    backend_logger.info("커스텀 플레이버를 사용 중인 서버 없음")
-                    backend_logger.info("커스텀 플레이버 삭제")
-                    controller.delete_flavor(flavor_name=flavor_name, node_name=node_name)
-
-                    backend_logger.info("데이터베이스에 플레이버 삭제")
-                    target_node_flavors = session.scalars(select(NodeFlavor)
-                                                          .where(NodeFlavor.flavor_name == flavor_name)).all()
-                    # 외래키 제약 조건이 있으니 중간 테이블부터 삭제
-                    for target_node_flavor in target_node_flavors:
-                        controller.delete_flavor(flavor_name=target_node_flavor.flavor_name,
-                                                 node_name=target_node_flavor.node_name)
-                        session.delete(target_node_flavor)
-                    session.delete(flavor)
-
+                flavor_delete(session=session,
+                              controller=controller,
+                              flavor_name=flavor_name,
+                              node_name=node_name)
                 network_delete(session=session,
                                controller=controller,
                                network_name=network_name,
@@ -220,7 +212,7 @@ async def server_return(server_name: str = Form(...),
                 session.commit()
             except Exception as e:
                 backend_logger.error(e)
-                return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
+                return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e))
 
         return ApiResponse(status.HTTP_200_OK, None)
     else:

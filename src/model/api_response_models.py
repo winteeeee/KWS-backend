@@ -17,7 +17,7 @@ class ErrorResponse(Response):
     def __init__(self, code: int, message: str):
         super().__init__(
             status_code=code,
-            content=message
+            content=json.dumps({"data": message}, default=str)
         )
 
 

@@ -1,5 +1,9 @@
 import paramiko
 import re
+from datetime import date
+from util.logger import get_logger
+
+backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/backend")
 
 
 def cloud_init_creator(server_name: str,
@@ -32,7 +36,8 @@ def validate_ssh_key(**kwargs) -> bool:
             client.connect(hostname=host_name, username=user_name, pkey=key)
         else:
             client.connect(hostname=host_name, username=user_name, password=kwargs['password'])
-    except (paramiko.SSHException, FileNotFoundError):
+    except Exception as e:
+        backend_logger.error(e)
         return False
     finally:
         client.close()
@@ -69,3 +74,16 @@ def create_env_dict(env: str) -> dict:
 def alphabet_check(s: str):
     pattern = r'^[a-zA-Z0-9]+$'
     return bool(re.match(pattern, s))
+
+
+def subnet_name_creator(network_name: str):
+    return f'{network_name}_subnet'
+
+
+def str_to_date(date_str: str):
+    split_date = date_str.split(sep='-')
+    return date(int(split_date[0]), int(split_date[1]), int(split_date[2]))
+
+
+def extension_date_check(old_end_date: date, new_end_date: date):
+    return old_end_date < new_end_date

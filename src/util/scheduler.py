@@ -7,6 +7,7 @@ from database.factories import MySQLEngineFactory
 from model.db_models import Server, Container
 from openStack.openstack_controller import OpenStackController
 from util.logger import get_logger
+from util.backend_utils import flavor_delete, network_delete
 
 controller = OpenStackController()
 db_connection = MySQLEngineFactory().get_instance()
@@ -23,15 +24,34 @@ def delete_expired_data():
 
         backend_logger.info("기간 지난 서버 삭제 시작")
         for server in expired_servers:
-            session.delete(server)
+            flavor_name = server.flavor_name
+            network_name = server.network_name
+            node_name = server.node_name
+
             controller.delete_server(server_name=server.server_name,
                                      node_name=server.node_name)
+            flavor_delete(session=session,
+                          controller=controller,
+                          flavor_name=flavor_name,
+                          node_name=node_name)
+            network_delete(session=session,
+                           controller=controller,
+                           network_name=network_name,
+                           node_name=node_name)
+            session.delete(server)
 
         backend_logger.info("기간 지난 컨테이너 삭제 시작")
         for container in expired_containers:
-            session.delete(container)
+            network_name = container.network_name
+            node_name = container.node_name
+
             controller.delete_container(container_name=container.container_name,
                                         node_name=container.node_name)
+            network_delete(session=session,
+                           controller=controller,
+                           network_name=network_name,
+                           node_name=node_name)
+            session.delete(container)
 
         session.commit()
 

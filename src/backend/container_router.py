@@ -10,10 +10,10 @@ from database.factories import MySQLEngineFactory
 from model.api_request_models import ContainerCreateRequestDTO, ContainerExtensionRequestDTO, ContainerReturnRequestDTO
 from model.api_response_models import ApiResponse, ErrorResponse, ContainersResponseDTO
 from model.db_models import Container
-from util.utils import create_env_dict, alphabet_check
+from util.utils import create_env_dict, alphabet_check, str_to_date, extension_date_check
 from util.selector import get_available_container_node
 from util.logger import get_logger
-from util.backend_utils import create_network, network_delete
+from util.backend_utils import create_network, network_delete, network_rollback
 from config.config import openstack_config
 
 
@@ -91,14 +91,14 @@ def rental(container_info: ContainerCreateRequestDTO):
             session.commit()
         except Exception as e:
             backend_logger.error(e)
-            controller.remove_interface_from_router(router_name=openstack_config['router'],
-                                                    node_name=node_name,
-                                                    internal_subnet_name=f'{container_info.network_name}_subnet')
-            controller.delete_network(network_name=container_info.network_name, node_name=node_name)
+            network_rollback(session=session,
+                             controller=controller,
+                             network_name=container_info.network_name,
+                             node_name=node_name)
             controller.delete_container(container_name=container_info.container_name,
                                         node_name=node_name)
             session.rollback()
-            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
+            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e))
 
         return ApiResponse(status.HTTP_201_CREATED, None)
 
@@ -120,13 +120,16 @@ def container_extension(container_info: ContainerExtensionRequestDTO):
             if sha256.hexdigest() != container.password:
                 return ErrorResponse(status.HTTP_400_BAD_REQUEST, "비밀번호가 맞지 않습니다.")
 
-            split_date = container_info.end_date.split(sep='-')
-            container.end_date = date(int(split_date[0]), int(split_date[1]), int(split_date[2]))
+            new_end_date = str_to_date(container_info.end_date)
+            if not extension_date_check(old_end_date=container.end_date, new_end_date=new_end_date):
+                return ErrorResponse(status.HTTP_400_BAD_REQUEST, "현재 대여 종료 일자 이후의 날짜를 선택 해야 합니다.")
+
+            container.end_date = new_end_date
             session.add(container)
             session.commit()
         except Exception as e:
             backend_logger.error(e)
-            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
+            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e))
 
     return ApiResponse(status.HTTP_200_OK, None)
 
@@ -145,6 +148,8 @@ def container_return(container_info: ContainerReturnRequestDTO):
             ).one()
 
             network_name = container.network_name
+            node_name = container.node_name
+
             backend_logger.info("비밀번호 검사")
             if sha256.hexdigest() != container.password:
                 return ErrorResponse(status.HTTP_400_BAD_REQUEST, "비밀번호가 맞지 않습니다.")
@@ -157,10 +162,10 @@ def container_return(container_info: ContainerReturnRequestDTO):
             network_delete(session=session,
                            controller=controller,
                            network_name=network_name,
-                           node_name=container.node_name)
+                           node_name=node_name)
             session.commit()
         except Exception as e:
             backend_logger.error(e)
-            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
+            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e))
 
     return ApiResponse(status.HTTP_200_OK, None)

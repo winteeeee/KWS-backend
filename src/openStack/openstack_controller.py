@@ -502,12 +502,11 @@ class OpenStackController:
         if logger_on:
             self._logger.info(f'[{node_name}] : remove_interface_from_router 실행')
         try:
-            self._connections[node_name].connection.network.remove_interface_from_router(router=self.find_router(router_name=router_name,
-                                                                                                                 node_name=node_name,
-                                                                                                                 logger_on=False),
-                                                                                         subnet_id=self.find_subnet(subnet_name=internal_subnet_name,
-                                                                                                                    node_name=node_name,
-                                                                                                                    logger_on=True).id)
+            router = self.find_router(router_name=router_name, node_name=node_name, logger_on=False)
+            subnet = self.find_subnet(subnet_name=internal_subnet_name, node_name=node_name, logger_on=False)
+            if router is not None and subnet is not None:
+                self._connections[node_name].connection.network.remove_interface_from_router(router=router,
+                                                                                             subnet_id=subnet.id)
         except:
             pass
 

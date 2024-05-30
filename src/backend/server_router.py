@@ -5,12 +5,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database.factories import MySQLEngineFactory
-from model.db_models import Server, Flavor, NodeFlavor, Network, NodeNetwork
+from model.db_models import Server, Flavor, NodeFlavor
 from model.api_request_models import ServerCreateRequestDTO
 from model.api_response_models import ApiResponse, ServerRentalResponseDTO, ErrorResponse, ServersResponseDTO
 from openStack.openstack_controller import OpenStackController
 from util.utils import validate_ssh_key, alphabet_check
-from util.backend_utils import network_isolation, network_delete
+from util.backend_utils import create_network, network_delete
 from util.logger import get_logger
 from util.selector import get_available_node
 from config.config import openstack_config
@@ -40,25 +40,25 @@ def server_rent(server_info: ServerCreateRequestDTO):
     backend_logger.info("서버 대여 요청 수신")
     with Session(db_connection) as session:
         backend_logger.info("서버 이름 중복 여부 검사")
-        if session.scalars(select(Server).where(Server.server_name == server_info.server_name)).one_or_none() is not None:
+        if len(session.scalars(select(Server).where(Server.server_name == server_info.server_name)).all()) != 0:
             return ErrorResponse(status.HTTP_400_BAD_REQUEST, "서버 이름 중복")
 
         backend_logger.info("서버 이름 검사")
         if not alphabet_check(server_info.server_name):
             return ErrorResponse(status.HTTP_400_BAD_REQUEST, "서버 이름은 알파벳과 숫자로만 구성되어야 합니다.")
 
+        if server_info.network_name is None:
+            backend_logger.info("기본 내부 네트워크 사용")
+            server_info.network_name = openstack_config['internal_network']['name']
+
         backend_logger.info("노드 선택")
         node_name = get_available_node(server_info.vcpus, server_info.ram, server_info.disk)
         if node_name is None:
             return ErrorResponse(status.HTTP_406_NOT_ACCEPTABLE, "시스템의 리소스가 부족합니다.")
 
-        if server_info.network_name is None:
-            backend_logger.info("기본 내부 네트워크 사용")
-            server_info.network_name = openstack_config['internal_network']['name']
-
         try:
             backend_logger.info("커스텀 플레이버 생성 여부 검사")
-            if session.scalars(select(Flavor).where(Flavor.name == server_info.flavor_name)).one_or_none() is None:
+            if len(session.scalars(select(Flavor).where(Flavor.name == server_info.flavor_name)).all()) == 0:
                 backend_logger.info("시스템에 해당 플레이버 존재하지 않음")
                 backend_logger.info("데이터베이스에 플레이버 삽입")
                 session.add(Flavor(
@@ -69,8 +69,8 @@ def server_rent(server_info: ServerCreateRequestDTO):
                     is_default=False
                 ))
 
-            if session.scalars(select(NodeFlavor).where(NodeFlavor.flavor_name == server_info.flavor_name,
-                                                        NodeFlavor.node_name == node_name)).one_or_none() is None:
+            if len(session.scalars(select(NodeFlavor).where(NodeFlavor.flavor_name == server_info.flavor_name,
+                                                            NodeFlavor.node_name == node_name)).all()) == 0:
                 backend_logger.info("커스텀 플레이버 생성 시작")
                 backend_logger.info(f"[{node_name}] : 커스텀 플레이버 생성 시작")
                 controller.create_flavor(flavor_name=server_info.flavor_name,
@@ -78,56 +78,13 @@ def server_rent(server_info: ServerCreateRequestDTO):
                                          vcpus=server_info.vcpus,
                                          ram=server_info.ram,
                                          disk=server_info.disk)
-        except Exception as e:
-            backend_logger.error(e)
-            session.rollback()
-            controller.delete_flavor(flavor_name=server_info.flavor_name,
-                                     node_name=node_name)
-            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "커스텀 플레이버 생성 오류")
 
-        # 네트워크 분리 적용
-        backend_logger.info("네트워크 분리 여부 검사")
-        try:
-            # 해당 네트워크가 없다면
-            if len(session.scalars(select(Network).where(Network.name == server_info.network_name)).all()) == 0:
-                backend_logger.info("시스템에 해당 네트워크 존재하지 않음")
-                backend_logger.info("데이터베이스에 네트워크 삽입")
-                session.add(Network(
-                    name=server_info.network_name,
-                    cidr=server_info.subnet_cidr,
-                    is_default=False,
-                    is_external=False,
-                ))
-    
-            # 해당 노드의 네트워크가 없다면
-            if session.scalars(select(NodeNetwork).where(NodeNetwork.network_name == server_info.network_name,
-                                                         NodeNetwork.node_name == node_name)).one_or_none() is None:
-                network_isolation(controller=controller,
-                                  node_name=node_name,
-                                  backend_logger=backend_logger,
-                                  network_name=server_info.network_name,
-                                  subnet_cidr=server_info.subnet_cidr)
-    
-                session.add(NodeNetwork(node_name=node_name,
-                                        network_name=server_info.network_name))
-        except Exception as e:
-            backend_logger.error(e)
-            controller.delete_flavor(flavor_name=server_info.flavor_name,
-                                     node_name=node_name)
-            # 네트워크 분리 복구
-            node_network = session.scalars(select(NodeNetwork).where(NodeNetwork.network_name == server_info.network_name,
-                                                         NodeNetwork.node_name == node_name)).one_or_none()
-            if node_network is not None and not node_network.network.is_default:
-                network_delete(controller=controller,
-                               node_name=node_name,
-                               network_name=server_info.network_name,
-                               backend_logger=backend_logger)
-            session.rollback()
-            return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "네트워크 분리 오류")
+            create_network(session=session,
+                           controller=controller,
+                           network_name=server_info.network_name,
+                           subnet_cidr=server_info.subnet_cidr,
+                           node_name=node_name)
 
-
-
-        try:
             backend_logger.info("서버 생성")
             floating_ip = None
             server, private_key = controller.create_server(server_name=server_info.server_name,
@@ -156,18 +113,15 @@ def server_rent(server_info: ServerCreateRequestDTO):
             session.commit()
         except Exception as e:
             backend_logger.error(e)
+            controller.delete_flavor(flavor_name=server_info.flavor_name,
+                                     node_name=node_name)
+            controller.remove_interface_from_router(router_name=openstack_config['router'],
+                                                    node_name=node_name,
+                                                    internal_subnet_name=f'{server_info.network_name}_subnet')
+            controller.delete_network(network_name=server_info.network_name, node_name=node_name)
             controller.delete_server(server_name=server_info.server_name,
                                      node_name=node_name,
                                      server_ip=floating_ip)
-            node_network = session.scalars(select(NodeNetwork).where(NodeNetwork.network_name == server_info.network_name,
-                                                         NodeNetwork.node_name == node_name)).one_or_none()
-            if node_network is not None and not node_network.network.is_default:
-                network_delete(controller=controller,
-                               node_name=node_name,
-                               network_name=server_info.network_name,
-                               backend_logger=backend_logger)
-            controller.delete_flavor(flavor_name=server_info.flavor_name,
-                                     node_name=node_name)
             session.rollback()
             return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, "백엔드 내부 오류")
         
@@ -259,25 +213,10 @@ async def server_return(server_name: str = Form(...),
                         session.delete(target_node_flavor)
                     session.delete(flavor)
 
-                # 내부 네트워크 삭제
-                network = session.scalars(select(Network).where(Network.name == network_name)).one()
-                attached_servers_on_network = len(network.servers)
-                attached_containers_on_network = len(network.containers)
-                if attached_servers_on_network + attached_containers_on_network == 0 and not network.is_default:
-                    backend_logger.info("내부 네트워크를 사용 중인 서버/컨테이너 없음")
-                    backend_logger.info("내부 네트워크 삭제 시작")
-
-                    backend_logger.info("데이터베이스에 네트워크 삭제")
-                    target_node_networks = session.scalars(
-                        select(NodeNetwork).where(NodeNetwork.network_name == network_name)).all()
-                    # 외래키 제약 조건이 있으니 중간 테이블부터 삭제
-                    for target_node_network in target_node_networks:
-                        network_delete(controller=controller,
-                                       node_name=target_node_network.node_name,
-                                       backend_logger=backend_logger,
-                                       network_name=target_node_network.network_name)
-                        session.delete(target_node_network)
-                    session.delete(network)
+                network_delete(session=session,
+                               controller=controller,
+                               network_name=network_name,
+                               node_name=node_name)
                 session.commit()
             except Exception as e:
                 backend_logger.error(e)

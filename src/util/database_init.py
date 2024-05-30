@@ -22,16 +22,16 @@ def insert_default_value():
     with (Session(engine.get_instance()) as session, session.begin()):
         backend_logger.info('노드 컨픽 주입')
         for node in node_config['nodes']:
-            if session.scalars(select(Node).where(Node.name == node['name'])).one_or_none() is None:
+            if len(session.scalars(select(Node).where(Node.name == node['name'])).all()) == 0:
                 session.add(Node(**node))
 
         backend_logger.info('기본 네트워크 주입')
-        if session.scalars(select(Network).where(Network.name == openstack_config['external_network']['name'])).one_or_none() is None:
+        if len(session.scalars(select(Network).where(Network.name == openstack_config['external_network']['name'])).all()) == 0:
             session.add(Network(name=openstack_config['external_network']['name'],
                                 cidr=openstack_config['external_network']['cidr'],
                                 is_default=True,
                                 is_external=True))
-        if session.scalars(select(Network).where(Network.name == openstack_config['internal_network']['name'])).one_or_none() is None:
+        if len(session.scalars(select(Network).where(Network.name == openstack_config['internal_network']['name'])).all()) == 0:
             session.add(Network(name=openstack_config['internal_network']['name'],
                                 cidr=openstack_config['internal_network']['cidr'],
                                 is_default=True,
@@ -39,7 +39,7 @@ def insert_default_value():
 
         backend_logger.info('기본 플레이버 주입')
         for flavor in openstack_config['flavors']:
-            if session.scalars(select(Flavor).where(Flavor.name == flavor['name'])).one_or_none() is None:
+            if len(session.scalars(select(Flavor).where(Flavor.name == flavor['name'])).all()) == 0:
                 session.add(Flavor(name=flavor['name'],
                                    vcpu=flavor['vcpu'],
                                    ram=flavor['ram'],

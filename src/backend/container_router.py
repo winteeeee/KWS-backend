@@ -1,5 +1,3 @@
-from datetime import date
-
 import hashlib
 from fastapi import APIRouter, status
 from sqlalchemy import select
@@ -91,12 +89,12 @@ def rental(container_info: ContainerCreateRequestDTO):
             session.commit()
         except Exception as e:
             backend_logger.error(e)
+            controller.delete_container(container_name=container_info.container_name,
+                                        node_name=node_name)
             network_rollback(session=session,
                              controller=controller,
                              network_name=container_info.network_name,
                              node_name=node_name)
-            controller.delete_container(container_name=container_info.container_name,
-                                        node_name=node_name)
             session.rollback()
             return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e))
 

@@ -116,13 +116,13 @@ def server_rent(server_info: ServerCreateRequestDTO):
             if not flavor.is_default:
                 controller.delete_flavor(flavor_name=server_info.flavor_name,
                                          node_name=node_name)
+            controller.delete_server(server_name=server_info.server_name,
+                                     node_name=node_name,
+                                     server_ip=floating_ip)
             network_rollback(session=session,
                              controller=controller,
                              network_name=server_info.network_name,
                              node_name=node_name)
-            controller.delete_server(server_name=server_info.server_name,
-                                     node_name=node_name,
-                                     server_ip=floating_ip)
             session.rollback()
             return ErrorResponse(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e))
         

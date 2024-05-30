@@ -676,7 +676,7 @@ class OpenStackController:
                          env: dict = None,
                          cmd: list = None,
                          timeout: int = 10,
-                         logger_on = True):
+                         logger_on: bool = True):
         """
         컨테이너를 생성합니다.
 

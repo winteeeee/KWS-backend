@@ -71,6 +71,19 @@ def create_env_dict(env: str) -> dict:
     return result
 
 
+def create_cmd_list(cmds: str):
+    if cmds is not None:
+        cmd_list = []
+        cmds = cmds.split(",")
+        for cmd in cmds:
+            cmd_list.append(cmd)
+
+        return cmd_list
+
+    else:
+        return None
+
+
 def alphabet_check(s: str):
     pattern = r'^[a-zA-Z0-9]+$'
     return bool(re.match(pattern, s))

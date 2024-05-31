@@ -55,6 +55,8 @@ def server_rent(server_info: ServerCreateRequestDTO):
         if node_name is None:
             return ErrorResponse(status.HTTP_406_NOT_ACCEPTABLE, "시스템의 리소스가 부족합니다.")
 
+        floating_ip = None
+
         try:
             backend_logger.info("커스텀 플레이버 생성 여부 검사")
             if len(session.scalars(select(Flavor).where(Flavor.name == server_info.flavor_name)).all()) == 0:
@@ -85,7 +87,6 @@ def server_rent(server_info: ServerCreateRequestDTO):
                            node_name=node_name)
 
             backend_logger.info("서버 생성")
-            floating_ip = None
             server, private_key = controller.create_server(server_name=server_info.server_name,
                                                            image_name=server_info.image_name,
                                                            flavor_name=server_info.flavor_name,

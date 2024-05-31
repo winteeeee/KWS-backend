@@ -8,7 +8,7 @@ from database.factories import MySQLEngineFactory
 from model.api_request_models import ContainerCreateRequestDTO, ContainerExtensionRequestDTO, ContainerReturnRequestDTO
 from model.api_response_models import ApiResponse, ErrorResponse, ContainersResponseDTO
 from model.db_models import Container
-from util.utils import create_env_dict, alphabet_check, str_to_date, extension_date_check
+from util.utils import create_env_dict, create_cmd_list, alphabet_check, str_to_date, extension_date_check
 from util.selector import get_available_container_node
 from util.logger import get_logger
 from util.backend_utils import create_network, network_delete, network_rollback
@@ -68,7 +68,7 @@ def rental(container_info: ContainerCreateRequestDTO):
                                                     image_name=container_info.image_name,
                                                     network_name=container_info.network_name,
                                                     env=create_env_dict(container_info.env),
-                                                    cmd=container_info.cmd)
+                                                    cmd=create_cmd_list(container_info.cmd))
 
             sha256 = hashlib.sha256()
             sha256.update(container_info.password.encode('utf-8'))

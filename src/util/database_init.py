@@ -73,22 +73,29 @@ def db_migration(old_db_id: str,
     )
 
     backend_logger.info('기존 데이터베이스에서 인스턴스를 불러오는 중')
-    with (Session(old_db_engine) as session, session.begin()):
-        nodes = session.scalars(select(Node)).all()
-        networks = session.scalars(select(Network)).all()
-        flavors = session.scalars(select(Flavor)).all()
-        node_networks = session.scalars(select(NodeNetwork)).all()
-        node_flavors = session.scalars(select(NodeFlavor)).all()
-        servers = session.scalars(select(Server)).all()
-        containers = session.scalars(select(Container)).all()
+    with (Session(old_db_engine) as old_db_session, old_db_session.begin()):
+        nodes = old_db_session.scalars(select(Node)).all()
+        networks = old_db_session.scalars(select(Network)).all()
+        flavors = old_db_session.scalars(select(Flavor)).all()
+        node_networks = old_db_session.scalars(select(NodeNetwork)).all()
+        node_flavors = old_db_session.scalars(select(NodeFlavor)).all()
+        servers = old_db_session.scalars(select(Server)).all()
+        containers = old_db_session.scalars(select(Container)).all()
 
         backend_logger.info('현재 데이터베이스에 인스턴스 삽입')
-        with (Session(engine.get_instance()) as old_db_session, old_db_session.begin()):
-            old_db_session.add(nodes)
-            old_db_session.add(networks)
-            old_db_session.add(flavors)
-            old_db_session.add(node_networks)
-            old_db_session.add(node_flavors)
-            old_db_session.add(servers)
-            old_db_session.add(containers)
-            old_db_session.commit()
+        with (Session(engine.get_instance()) as session, session.begin()):
+            for node in nodes:
+                session.add(node)
+            for network in networks:
+                session.add(network)
+            for flavor in flavors:
+                session.add(flavor)
+            for node_network in node_networks:
+                session.add(node_network)
+            for node_flavor in node_flavors:
+                session.add(node_flavor)
+            for server in servers:
+                session.add(server)
+            for container in containers:
+                session.add(container)
+            session.commit()

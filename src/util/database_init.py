@@ -60,20 +60,20 @@ def insert_default_value():
         session.commit()
 
 
-def db_migration(new_db_id: str,
-                 new_db_passwd: str,
-                 new_db_ip: str,
-                 new_db_port: int,
-                 new_db_name: str):
+def db_migration(old_db_id: str,
+                 old_db_passwd: str,
+                 old_db_ip: str,
+                 old_db_port: int,
+                 old_db_name: str):
     backend_logger.info('데이터베이스 마이그레이션 시작')
     engine = MySQLEngineFactory()
-    new_db_engine = create_engine(
-        f"mysql+pymysql://{new_db_id}:{new_db_passwd}@{new_db_ip}"
-        f":{new_db_port}/{new_db_name}"
+    old_db_engine = create_engine(
+        f"mysql+pymysql://{old_db_id}:{old_db_passwd}@{old_db_ip}"
+        f":{old_db_port}/{old_db_name}"
     )
 
     backend_logger.info('기존 데이터베이스에서 인스턴스를 불러오는 중')
-    with (Session(engine.get_instance()) as session, session.begin()):
+    with (Session(old_db_engine) as session, session.begin()):
         nodes = session.scalars(select(Node)).all()
         networks = session.scalars(select(Network)).all()
         flavors = session.scalars(select(Flavor)).all()
@@ -82,13 +82,13 @@ def db_migration(new_db_id: str,
         servers = session.scalars(select(Server)).all()
         containers = session.scalars(select(Container)).all()
 
-        backend_logger.info('새 데이터베이스에 인스턴스 삽입')
-        with (Session(new_db_engine) as new_db_session, new_db_session.begin()):
-            new_db_session.add(nodes)
-            new_db_session.add(networks)
-            new_db_session.add(flavors)
-            new_db_session.add(node_networks)
-            new_db_session.add(node_flavors)
-            new_db_session.add(servers)
-            new_db_session.add(containers)
-            new_db_session.commit()
+        backend_logger.info('현재 데이터베이스에 인스턴스 삽입')
+        with (Session(engine.get_instance()) as old_db_session, old_db_session.begin()):
+            old_db_session.add(nodes)
+            old_db_session.add(networks)
+            old_db_session.add(flavors)
+            old_db_session.add(node_networks)
+            old_db_session.add(node_flavors)
+            old_db_session.add(servers)
+            old_db_session.add(containers)
+            old_db_session.commit()

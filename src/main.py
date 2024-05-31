@@ -9,12 +9,6 @@ from util.database_init import create_tables, insert_default_value, db_migration
 if __name__ == "__main__":
     create_tables()
     insert_default_value()
-    # 첫 배포 시엔 insert_default_value()를 끄고 db_migration()을 실행
-    # db_migration(old_db_id='',
-    #              old_db_passwd='',
-    #              old_db_ip='',
-    #              old_db_port=3306,
-    #              old_db_name='')
 
     scheduler_thread = threading.Thread(target=run_scheduler)
     scheduler_thread.daemon = True

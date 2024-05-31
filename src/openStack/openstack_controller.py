@@ -704,7 +704,7 @@ class OpenStackController:
         timeout_count = 0
         if logger_on:
             self._logger.info(f'[{node_name}] : 컨테이너 준비 대기 중')
-        while container.status == 'Creating' or timeout_count <= timeout:
+        while container.status == 'Creating' or container.status == 'Created' or timeout_count <= timeout:
             container = self.find_container(container_name=container_name, node_name=node_name, logger_on=False)
             time.sleep(1)
             timeout_count += 1
@@ -712,7 +712,8 @@ class OpenStackController:
         if timeout_count <= timeout:
             raise Exception('타임아웃 시간 초과')
 
-        if container.status != 'Running':
+        self._logger.info(f'컨테이너 상태: {container.status}')
+        if container.status == 'Stopped' or container.status == 'Error':
             raise Exception('컨테이너가 Running 상태가 아닙니다.')
 
         return container

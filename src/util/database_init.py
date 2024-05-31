@@ -4,28 +4,31 @@ from sqlalchemy.orm import Session
 from model.db_models import Base, Node, Network, Flavor, NodeNetwork, NodeFlavor, Server, Container
 from database.factories import MySQLEngineFactory
 from config.config import node_config, openstack_config
-from util.logger import get_logger
 
-backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/backend")
+
+def drop_tables():
+    print('테이블 삭제')
+    engine = MySQLEngineFactory().get_instance()
+    Base.metadata.drop_all(engine)
 
 
 def create_tables():
-    backend_logger.info('테이블 생성')
+    print('테이블 생성')
     engine = MySQLEngineFactory().get_instance()
     Base.metadata.create_all(engine)
 
 
 def insert_default_value():
     engine = MySQLEngineFactory()
-    backend_logger.info('데이터베이스 초기화 작업 시작')
+    print('데이터베이스 초기화 작업 시작')
 
     with (Session(engine.get_instance()) as session, session.begin()):
-        backend_logger.info('노드 컨픽 주입')
+        print('노드 컨픽 주입')
         for node in node_config['nodes']:
             if len(session.scalars(select(Node).where(Node.name == node['name'])).all()) == 0:
                 session.add(Node(**node))
 
-        backend_logger.info('기본 네트워크 주입')
+        print('기본 네트워크 주입')
         if len(session.scalars(select(Network).where(Network.name == openstack_config['external_network']['name'])).all()) == 0:
             session.add(Network(name=openstack_config['external_network']['name'],
                                 cidr=openstack_config['external_network']['cidr'],
@@ -37,7 +40,7 @@ def insert_default_value():
                                 is_default=True,
                                 is_external=False))
 
-        backend_logger.info('기본 플레이버 주입')
+        print('기본 플레이버 주입')
         for flavor in openstack_config['flavors']:
             if len(session.scalars(select(Flavor).where(Flavor.name == flavor['name'])).all()) == 0:
                 session.add(Flavor(name=flavor['name'],
@@ -46,7 +49,7 @@ def insert_default_value():
                                    disk=flavor['disk'],
                                    is_default=True))
 
-        backend_logger.info('연관 관계 설정')
+        print('연관 관계 설정')
         for node in node_config['nodes']:
             if len(session.scalars(select(NodeNetwork).where(NodeNetwork.node_name == node['name'])).all()) == 0:
                 session.add(NodeNetwork(node_name=node['name'],
@@ -60,30 +63,42 @@ def insert_default_value():
         session.commit()
 
 
-def db_migration(old_db_id: str,
-                 old_db_passwd: str,
-                 old_db_ip: str,
-                 old_db_port: int,
-                 old_db_name: str):
-    backend_logger.info('데이터베이스 마이그레이션 시작')
-    engine = MySQLEngineFactory()
-    old_db_engine = create_engine(
-        f"mysql+pymysql://{old_db_id}:{old_db_passwd}@{old_db_ip}"
-        f":{old_db_port}/{old_db_name}"
+def db_migration(from_db_id: str,
+                 from_db_passwd: str,
+                 from_db_ip: str,
+                 from_db_port: int,
+                 from_db_name: str,
+                 to_db_id: str,
+                 to_db_passwd: str,
+                 to_db_ip: str,
+                 to_db_port: int,
+                 to_db_name: str):
+    print('데이터베이스 마이그레이션 시작')
+    from_db_engine = create_engine(
+        f"mysql+pymysql://{from_db_id}:{from_db_passwd}@{from_db_ip}"
+        f":{from_db_port}/{from_db_name}"
+    )
+    to_db_engine = create_engine(
+        f"mysql+pymysql://{to_db_id}:{to_db_passwd}@{to_db_ip}"
+        f":{to_db_port}/{to_db_name}"
     )
 
-    backend_logger.info('기존 데이터베이스에서 인스턴스를 불러오는 중')
-    with (Session(old_db_engine) as old_db_session, old_db_session.begin()):
-        nodes = old_db_session.scalars(select(Node)).all()
-        networks = old_db_session.scalars(select(Network)).all()
-        flavors = old_db_session.scalars(select(Flavor)).all()
-        node_networks = old_db_session.scalars(select(NodeNetwork)).all()
-        node_flavors = old_db_session.scalars(select(NodeFlavor)).all()
-        servers = old_db_session.scalars(select(Server)).all()
-        containers = old_db_session.scalars(select(Container)).all()
+    print('목표 데이터베이스 초기화 중')
+    Base.metadata.drop_all(to_db_engine)
+    Base.metadata.create_all(to_db_engine)
 
-        backend_logger.info('현재 데이터베이스에 인스턴스 삽입')
-        with (Session(engine.get_instance()) as session, session.begin()):
+    print('기존 데이터베이스에서 인스턴스를 불러오는 중')
+    with (Session(from_db_engine) as from_db_session, from_db_session.begin()):
+        nodes = from_db_session.scalars(select(Node)).all()
+        networks = from_db_session.scalars(select(Network)).all()
+        flavors = from_db_session.scalars(select(Flavor)).all()
+        node_networks = from_db_session.scalars(select(NodeNetwork)).all()
+        node_flavors = from_db_session.scalars(select(NodeFlavor)).all()
+        servers = from_db_session.scalars(select(Server)).all()
+        containers = from_db_session.scalars(select(Container)).all()
+
+        print('현재 데이터베이스에 인스턴스 삽입')
+        with (Session(to_db_engine) as session, session.begin()):
             for node in nodes:
                 node_dict = node.__dict__
                 del node_dict['_sa_instance_state']

@@ -85,17 +85,31 @@ def db_migration(old_db_id: str,
         backend_logger.info('현재 데이터베이스에 인스턴스 삽입')
         with (Session(engine.get_instance()) as session, session.begin()):
             for node in nodes:
-                session.add(node)
+                node_dict = node.__dict__
+                del node_dict['_sa_instance_state']
+                session.add(Node(**node_dict))
             for network in networks:
-                session.add(network)
+                network_dict = network.__dict__
+                del network_dict['_sa_instance_state']
+                session.add(Network(**network_dict))
             for flavor in flavors:
-                session.add(flavor)
+                flavor_dict = flavor.__dict__
+                del flavor_dict['_sa_instance_state']
+                session.add(Flavor(**flavor_dict))
             for node_network in node_networks:
-                session.add(node_network)
+                node_network_dict = node_network.__dict__
+                del node_network_dict['_sa_instance_state']
+                session.add(NodeNetwork(**node_network_dict))
             for node_flavor in node_flavors:
-                session.add(node_flavor)
+                node_flavor_dict = node_flavor.__dict__
+                del node_flavor_dict['_sa_instance_state']
+                session.add(NodeFlavor(**node_flavor_dict))
             for server in servers:
-                session.add(server)
+                server_dict = server.__dict__
+                del server_dict['_sa_instance_state']
+                session.add(Server(**server_dict))
             for container in containers:
-                session.add(container)
+                container_dict = container.__dict__
+                del container_dict['_sa_instance_state']
+                session.add(Container(**container_dict))
             session.commit()

@@ -1,7 +1,7 @@
-from sqlalchemy import select
+from sqlalchemy import select, create_engine
 from sqlalchemy.orm import Session
 
-from model.db_models import Base, Node, Network, Flavor, NodeNetwork, NodeFlavor
+from model.db_models import Base, Node, Network, Flavor, NodeNetwork, NodeFlavor, Server, Container
 from database.factories import MySQLEngineFactory
 from config.config import node_config, openstack_config
 from util.logger import get_logger
@@ -58,3 +58,37 @@ def insert_default_value():
                     session.add(NodeFlavor(node_name=node['name'],
                                            flavor_name=flavor['name']))
         session.commit()
+
+
+def db_migration(new_db_id: str,
+                 new_db_passwd: str,
+                 new_db_ip: str,
+                 new_db_port: int,
+                 new_db_name: str):
+    backend_logger.info('데이터베이스 마이그레이션 시작')
+    engine = MySQLEngineFactory()
+    new_db_engine = create_engine(
+        f"mysql+pymysql://{new_db_id}:{new_db_passwd}@{new_db_ip}"
+        f":{new_db_port}/{new_db_name}"
+    )
+
+    backend_logger.info('기존 데이터베이스에서 인스턴스를 불러오는 중')
+    with (Session(engine.get_instance()) as session, session.begin()):
+        nodes = session.scalars(select(Node)).all()
+        networks = session.scalars(select(Network)).all()
+        flavors = session.scalars(select(Flavor)).all()
+        node_networks = session.scalars(select(NodeNetwork)).all()
+        node_flavors = session.scalars(select(NodeFlavor)).all()
+        servers = session.scalars(select(Server)).all()
+        containers = session.scalars(select(Container)).all()
+
+        backend_logger.info('새 데이터베이스에 인스턴스 삽입')
+        with (Session(new_db_engine) as new_db_session, new_db_session.begin()):
+            new_db_session.add(nodes)
+            new_db_session.add(networks)
+            new_db_session.add(flavors)
+            new_db_session.add(node_networks)
+            new_db_session.add(node_flavors)
+            new_db_session.add(servers)
+            new_db_session.add(containers)
+            new_db_session.commit()

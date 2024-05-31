@@ -20,7 +20,7 @@ def flavor_list_show():
     backend_logger.info("플레이버 조회 요청 수신")
 
     with Session(db_connection) as session, session.begin():
-        flavors = session.scalars(select(Flavor).where(Flavor.is_default)).all()
+        flavors = session.scalars(select(Flavor)).all()
         for flavor in flavors:
             flavor_list.append(FlavorListResponseDTO(flavor.name, flavor.vcpu, flavor.ram, flavor.disk))
     flavor_list = sorted(flavor_list, key=lambda f: (f.cpu, f.ram, f.disk))

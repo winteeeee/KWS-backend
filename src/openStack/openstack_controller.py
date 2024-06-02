@@ -16,9 +16,6 @@ class OpenStackController:
             cls.instance = super().__new__(cls)
         return cls.instance
 
-    def kws_init(self, node_name: str):
-        pass
-
     def monitoring_resources(self, node_name, logger_on: bool = True) -> dict:
         """
         UC- 서버 자원 현황 조회
@@ -675,7 +672,6 @@ class OpenStackController:
                          node_name: str,
                          env: dict = None,
                          cmd: list = None,
-                         timeout: int = 10,
                          logger_on: bool = True):
         """
         컨테이너를 생성합니다.
@@ -685,7 +681,6 @@ class OpenStackController:
         :param network_name: 컨테이너에 연결될 네트워크 이름
         :param env: 덮어 씌울 환경변수
         :param cmd: 덮어 씌울 명령어
-        :param timeout: 컨테이너 실행 대기 타임아웃
         :param node_name: 접근할 노드명
         :param logger_on: 로그 온/오프
         :return: 생성된 컨테이너 인스턴스
@@ -701,16 +696,11 @@ class OpenStackController:
                                                                                command=cmd,
                                                                                nets=[{'network': network_name}])
 
-        timeout_count = 0
         if logger_on:
             self._logger.info(f'[{node_name}] : 컨테이너 준비 대기 중')
-        while container.status == 'Creating' or container.status == 'Created' or timeout_count <= timeout:
+        while container.status == 'Creating' or container.status == 'Created':
             container = self.find_container(container_name=container_name, node_name=node_name, logger_on=False)
             time.sleep(1)
-            timeout_count += 1
-
-        if timeout_count <= timeout:
-            raise Exception('타임아웃 시간 초과')
 
         self._logger.info(f'컨테이너 상태: {container.status}')
         if container.status == 'Stopped' or container.status == 'Error':
@@ -734,14 +724,13 @@ class OpenStackController:
         except:
             return None
 
-    def delete_container(self, container_name: str, node_name: str, logger_on: bool = True, timeout:int = 10):
+    def delete_container(self, container_name: str, node_name: str, logger_on: bool = True):
         """
         컨테이너를 삭제합니다.
 
         :param container_name: 삭제할 컨테이너 이름
         :param node_name: 접근할 노드명
         :param logger_on: 로그 온/오프
-        :param timeout: 컨테이너 삭제 대기 타임아웃
         :return: 없음
         """
         if logger_on:
@@ -751,10 +740,8 @@ class OpenStackController:
         if container is not None:
             self._connections[node_name].zun_connection.containers.delete(id=container_name, force=True)
 
-        timeout_count = 0
-        if logger_on:
-            self._logger.info(f'[{node_name}] : 컨테이너 삭제 대기 중')
-        while container is not None or timeout_count <= timeout:
-            container = self.find_container(container_name=container_name, node_name=node_name, logger_on=False)
-            time.sleep(1)
-            timeout_count += 1
+            if logger_on:
+                self._logger.info(f'[{node_name}] : 컨테이너 삭제 대기 중')
+            while container is not None:
+                container = self.find_container(container_name=container_name, node_name=node_name, logger_on=False)
+                time.sleep(1)

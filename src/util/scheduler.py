@@ -11,7 +11,7 @@ from util.backend_utils import flavor_delete, network_delete
 
 controller = OpenStackController()
 db_connection = MySQLEngineFactory().get_instance()
-backend_logger = get_logger(name='backend', log_level='INFO', save_path="./log/backend")
+backend_logger = get_logger(name='scheduler', log_level='INFO', save_path="./log/backend")
 
 
 def delete_expired_data():
@@ -62,7 +62,7 @@ schedule.every().day.at("00:00").do(delete_expired_data)
 def run_scheduler():
     while True:
         schedule.run_pending()
-        time.sleep(1)
+        time.sleep(60)
 
 
 if __name__ == "__main__":

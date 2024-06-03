@@ -73,7 +73,7 @@ def get_resources():
             using_resource_by_node.append(NodeUsingResourceDTO(name=node['name'],
                                                                count=server_count,
                                                                vcpus=using_vcpus,
-                                                               ram=float(using_ram / 1024),
+                                                               ram=using_ram,
                                                                disk=using_disk).__dict__)
             compute_node_dict = compute_node.__dict__
             del compute_node_dict['id']
@@ -84,7 +84,7 @@ def get_resources():
         limit_total_resource = {'vcpu': total_limit_vcpu, 'ram': total_limit_ram, 'disk': total_limit_disk}
         using_total_resource = UsingResourceDTO(count=total_server_count,
                                                 vcpus=total_using_vcpu,
-                                                ram=float(total_using_ram / 1024),
+                                                ram=total_using_ram,
                                                 disk=total_using_disk).__dict__
         limit_resources = NodesSpecResponseDTO(total_spec=limit_total_resource,
                                                nodes_spec=limit_resource_by_node).__dict__

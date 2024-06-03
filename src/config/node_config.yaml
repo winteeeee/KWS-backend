@@ -1,21 +1,21 @@
 nodes:
   - name: "node1"
     vcpu: 6
-    ram: 6
+    ram: 6144
     disk: 80
     auth_url: "http://192.168.0.111/identity"
   - name: "node2"
     vcpu: 6
-    ram: 6
+    ram: 6144
     disk: 80
     auth_url: "http://192.168.0.22/identity"
   - name: "node3"
     vcpu: 6
-    ram: 6
+    ram: 6144
     disk: 80
     auth_url: "http://192.168.0.33/identity"
   - name: "node4"
     vcpu: 6
-    ram: 6
+    ram: 6144
     disk: 80
     auth_url: "http://192.168.0.44/identity"
